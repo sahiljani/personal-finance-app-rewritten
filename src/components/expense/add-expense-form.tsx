@@ -51,16 +51,7 @@ export function AddExpenseForm({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isSuggesting, setIsSuggesting] = React.useState(false);
 
-   // Use useEffect to reset form when expenseToEdit changes or form is opened/closed
-   React.useEffect(() => {
-    form.reset({
-      amount: expenseToEdit?.amount ?? undefined,
-      description: expenseToEdit?.description ?? "",
-      categoryId: expenseToEdit?.categoryId ?? "",
-    });
-  }, [expenseToEdit, form]);
-
-
+  // Initialize the form first
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -69,6 +60,17 @@ export function AddExpenseForm({
       categoryId: expenseToEdit?.categoryId ?? "",
     },
   });
+
+   // Use useEffect to reset form when expenseToEdit changes or form is opened/closed
+   React.useEffect(() => {
+    form.reset({
+      amount: expenseToEdit?.amount ?? undefined,
+      description: expenseToEdit?.description ?? "",
+      categoryId: expenseToEdit?.categoryId ?? "",
+    });
+    // form is stable, but expenseToEdit can change
+  }, [expenseToEdit, form]);
+
 
    // Debounce suggestion logic
     const debounceTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -122,7 +124,7 @@ export function AddExpenseForm({
           description: "Your expense has been successfully added.",
         });
       }
-      form.reset(); // Reset form after successful submission
+      form.reset({ amount: undefined, description: '', categoryId: ''}); // Reset form after successful submission with empty values
       onSave?.(savedExpense); // Call callback if provided
     } catch (error) {
       console.error("Failed to save expense:", error);
@@ -203,7 +205,7 @@ export function AddExpenseForm({
                 Cancel
             </Button>
            )}
-          <Button type="submit" disabled={isSubmitting} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+          <Button type="submit" disabled={isSubmitting || !form.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -26,5 +26,33 @@
     "categoryId": "other",
     "date": "2025-05-05T17:22:52.332Z",
     "id": "1746465773516-6gqs1lj-3"
+  },
+  {
+    "amount": 4.75,
+    "description": "Iced Latte",
+    "categoryId": "other",
+    "date": "2025-05-05T17:30:17.135Z",
+    "id": "1746466218338-llnu4sc-0"
+  },
+  {
+    "amount": 3.25,
+    "description": "Croissant",
+    "categoryId": "other",
+    "date": "2025-05-05T17:30:17.135Z",
+    "id": "1746466218339-wi13xyt-1"
+  },
+  {
+    "amount": 4.5,
+    "description": "Bagel w/ Cream Cheese",
+    "categoryId": "other",
+    "date": "2025-05-05T17:30:17.135Z",
+    "id": "1746466218339-ap31q8e-2"
+  },
+  {
+    "amount": 2,
+    "description": "Bottled Water",
+    "categoryId": "other",
+    "date": "2025-05-05T17:30:17.135Z",
+    "id": "1746466218339-0t1nsl3-3"
   }
 ]
