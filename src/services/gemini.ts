@@ -1,5 +1,6 @@
+
 /**
- * Represents an item extracted from a receipt, including its description and amount.
+ * Represents an item extracted from a receipt, including its description, amount, and suggested category.
  */
 export interface ReceiptItem {
   /**
@@ -10,6 +11,10 @@ export interface ReceiptItem {
    * The amount of the item.
    */
   amount: number;
+  /**
+   * The suggested category ID for the item.
+   */
+  categoryId: string;
 }
 
 /**
@@ -38,23 +43,28 @@ export async function extractReceiptItems(file: File): Promise<ReceiptItem[]> {
     // }
 
 
-  // Return mock data matching the expected structure
+  // Return mock data matching the expected structure including categoryId
   return [
     {
       description: 'Iced Latte',
       amount: 4.75,
+      categoryId: 'outside-food', // Example category
     },
     {
       description: 'Croissant',
       amount: 3.25,
+      categoryId: 'outside-food', // Example category
     },
      {
       description: 'Bagel w/ Cream Cheese',
       amount: 4.50,
+      categoryId: 'outside-food', // Example category
     },
      {
         description: 'Bottled Water',
-        amount: 2.00
+        amount: 2.00,
+        categoryId: 'grocery', // Example category
      }
   ];
 }
+

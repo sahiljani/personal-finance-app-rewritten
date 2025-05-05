@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -13,10 +14,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, Trash2, Edit2, Check, X } from "lucide-react";
+import { Loader2, Upload, Trash2, Edit2, Check, X, AlertCircle } from "lucide-react";
 import type { ExtractedReceiptItem, Category, Expense } from "@/lib/types";
-import { processReceiptFile, addExpensesBatch, getCategories, suggestCategory } from "@/lib/actions";
+import { processReceiptFile, addExpensesBatch, getCategories } from "@/lib/actions"; // Removed suggestCategory as AI does it now
 import {
     Select,
     SelectContent,
@@ -32,18 +34,28 @@ type UploadReceiptDrawerProps = {
 
 type EditableItem = ExtractedReceiptItem & {
   id: string; // Temporary ID for editing state
-  categoryId: string;
+  // categoryId is already part of ExtractedReceiptItem
   isEditing: boolean;
 };
+
+// Enum for processing status
+enum ProcessingStatus {
+    Idle = 'idle',
+    Processing = 'processing',
+    Success = 'success',
+    Error = 'error',
+    NoItemsFound = 'no_items_found'
+}
 
 export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerProps) {
   const { toast } = useToast();
   const [file, setFile] = React.useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [processingStatus, setProcessingStatus] = React.useState<ProcessingStatus>(ProcessingStatus.Idle);
   const [isSaving, setIsSaving] = React.useState(false);
   const [extractedItems, setExtractedItems] = React.useState<EditableItem[]>([]);
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Fetch categories when the drawer opens
@@ -68,9 +80,10 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
   React.useEffect(() => {
     if (!open) {
       setFile(null);
-      setIsProcessing(false);
+      setProcessingStatus(ProcessingStatus.Idle);
       setIsSaving(false);
       setExtractedItems([]);
+      setErrorMessage(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = ""; // Clear the file input
       }
@@ -88,14 +101,16 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
             return;
         }
         // Optional: Add size check
-        // const maxSize = 5 * 1024 * 1024; // 5MB
-        // if (selectedFile.size > maxSize) {
-        //     toast({ title: "File Too Large", description: "Please upload a file smaller than 5MB.", variant: "destructive" });
-        //     return;
-        // }
+         const maxSize = 10 * 1024 * 1024; // 10MB limit for Genkit
+         if (selectedFile.size > maxSize) {
+             toast({ title: "File Too Large", description: "Please upload a file smaller than 10MB.", variant: "destructive" });
+             return;
+         }
 
       setFile(selectedFile);
       setExtractedItems([]); // Clear previous results if a new file is selected
+      setProcessingStatus(ProcessingStatus.Idle); // Reset status
+      setErrorMessage(null);
     }
   };
 
@@ -109,7 +124,8 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
         return;
     }
 
-    setIsProcessing(true);
+    setProcessingStatus(ProcessingStatus.Processing);
+    setErrorMessage(null);
     setExtractedItems([]);
 
     try {
@@ -123,19 +139,23 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
 
           const results = await processReceiptFile(base64data);
 
-          // Suggest categories for each item
-          const itemsWithSuggestedCategories = await Promise.all(results.map(async (item, index) => {
-              const suggestedId = await suggestCategory(item.description);
-              return {
+          if (results.length === 0) {
+               setProcessingStatus(ProcessingStatus.NoItemsFound);
+               toast({ title: "No Items Found", description: "The AI couldn't extract any items from the receipt.", variant: "default" });
+          } else {
+              // Map results to EditableItem state, using the AI-suggested categoryId
+              const itemsWithTempIds = results.map((item, index) => ({
                   ...item,
                   id: `item-${index}-${Date.now()}`, // Temp ID
-                  categoryId: suggestedId && categories.some(c => c.id === suggestedId) ? suggestedId : (categories.find(c => c.name === 'Other')?.id || ''), // Fallback to "Other" or empty
                   isEditing: false,
-              };
-          }));
+                   // Ensure categoryId exists and is valid, otherwise fallback
+                  categoryId: item.categoryId && categories.some(c => c.id === item.categoryId) ? item.categoryId : (categories.find(c => c.id === 'other')?.id || ''),
+              }));
 
-          setExtractedItems(itemsWithSuggestedCategories);
-          toast({ title: "Receipt Processed", description: "Review the extracted items below." });
+              setExtractedItems(itemsWithTempIds);
+              setProcessingStatus(ProcessingStatus.Success);
+              toast({ title: "Receipt Processed", description: "Review the extracted items below." });
+          }
       };
       reader.onerror = (error) => {
           console.error("File reading error:", error);
@@ -143,14 +163,15 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
       };
     } catch (error) {
       console.error("Upload failed:", error);
+      const message = error instanceof Error ? error.message : "Could not process the receipt. Please try again.";
+      setErrorMessage(message);
+      setProcessingStatus(ProcessingStatus.Error);
       toast({
-        title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Could not process the receipt. Please try again.",
+        title: "Processing Failed",
+        description: message,
         variant: "destructive",
       });
        setExtractedItems([]); // Clear items on error
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -173,6 +194,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
 
     const handleCancelEdit = (id: string) => {
         // Optional: Restore original values if needed, for now just toggle back
+        // Might require storing original item state temporarily
         toggleEdit(id);
     }
 
@@ -196,7 +218,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
              description: `Please ensure all items have a valid description, positive amount, and selected category. Issue found with: "${invalidItem.description || 'N/A'}"`,
              variant: "destructive",
          });
-         // Highlight the invalid item visually if possible
+         // Optional: Highlight the invalid item visually if possible
          return;
      }
 
@@ -208,7 +230,6 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
         description: item.description,
         categoryId: item.categoryId,
         date: new Date().toISOString(), // Use current date for uploaded items
-        // We don't have the receipt URL easily accessible here, maybe store later?
       }));
 
       await addExpensesBatch(expensesToAdd);
@@ -230,13 +251,19 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
     }
   };
 
+    const isProcessing = processingStatus === ProcessingStatus.Processing;
+    const showResults = processingStatus === ProcessingStatus.Success && extractedItems.length > 0;
+    const showNoItemsMessage = processingStatus === ProcessingStatus.NoItemsFound;
+    const showError = processingStatus === ProcessingStatus.Error;
+
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="h-[90vh] flex flex-col">
         <SheetHeader>
           <SheetTitle>Upload Receipt</SheetTitle>
           <SheetDescription>
-            Upload an image (JPG, PNG) or PDF of your receipt. We&apos;ll extract the items for you.
+            Upload an image (JPG, PNG, WEBP) or PDF (max 10MB). We&apos;ll use AI to extract the items.
           </SheetDescription>
         </SheetHeader>
 
@@ -252,11 +279,11 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                  onChange={handleFileChange}
                  ref={fileInputRef}
                  className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
-                 disabled={isProcessing || isLoadingCategories}
+                 disabled={isProcessing || isLoadingCategories || isSaving}
                />
               <Button
                 onClick={handleUpload}
-                disabled={!file || isProcessing || isLoadingCategories || isSaving}
+                disabled={!file || isProcessing || isLoadingCategories || isSaving || processingStatus === ProcessingStatus.Success} // Disable if already succeeded for this file
                 className="bg-accent hover:bg-accent/90 text-accent-foreground"
               >
                 {isProcessing ? (
@@ -271,42 +298,75 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
              {isLoadingCategories && <p className="text-sm text-yellow-600 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Loading categories...</p>}
           </div>
 
-          {/* Extracted Items List */}
+          {/* Processing Indicator */}
            {isProcessing && (
                 <div className="flex justify-center items-center flex-col gap-2 text-muted-foreground py-10">
                     <Loader2 className="h-8 w-8 animate-spin" />
-                    <p>Processing receipt...</p>
+                    <p>Processing receipt with AI...</p>
+                     <p className="text-xs">(This may take a moment)</p>
                 </div>
             )}
-          {extractedItems.length > 0 && (
+
+            {/* Error Message */}
+            {showError && errorMessage && (
+                 <Alert variant="destructive" className="my-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Processing Error</AlertTitle>
+                    <AlertDescription>
+                       {errorMessage} Please try a different file or add expenses manually.
+                    </AlertDescription>
+                </Alert>
+            )}
+
+             {/* No Items Found Message */}
+             {showNoItemsMessage && (
+                 <Alert variant="default" className="my-4 border-yellow-500 text-yellow-700 [&>svg]:text-yellow-700">
+                     <AlertCircle className="h-4 w-4" />
+                     <AlertTitle>No Items Extracted</AlertTitle>
+                     <AlertDescription>
+                         The AI could not find any line items in the uploaded receipt. Please ensure the image is clear or try adding expenses manually.
+                     </AlertDescription>
+                 </Alert>
+             )}
+
+
+          {/* Extracted Items List */}
+          {showResults && (
             <div className="space-y-3">
-              <h3 className="font-semibold text-lg">Extracted Items</h3>
+              <h3 className="font-semibold text-lg">Extracted Items ({extractedItems.length})</h3>
+              <p className="text-sm text-muted-foreground">Review and edit the items below before adding them.</p>
               {extractedItems.map((item) => (
                 <div key={item.id} className="border rounded-md p-3 shadow-sm bg-card">
                    {item.isEditing ? (
                        <div className="space-y-2">
+                            <Label htmlFor={`desc-${item.id}`}>Description</Label>
                            <Input
+                                id={`desc-${item.id}`}
                                 value={item.description}
                                 onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
                                 className="text-base"
                                 placeholder="Description"
                            />
+                            <Label htmlFor={`amount-${item.id}`}>Amount</Label>
                            <Input
-                               type="number"
-                               step="0.01"
-                               value={item.amount}
-                               onChange={(e) => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)}
-                               className="text-base"
-                               placeholder="Amount"
+                                id={`amount-${item.id}`}
+                                type="number"
+                                step="0.01"
+                                value={item.amount}
+                                onChange={(e) => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)}
+                                className="text-base"
+                                placeholder="Amount"
                            />
+                            <Label htmlFor={`cat-${item.id}`}>Category</Label>
                             <Select
                                 value={item.categoryId}
                                 onValueChange={(value) => handleItemChange(item.id, 'categoryId', value)}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger id={`cat-${item.id}`}>
                                     <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                     {categories.length === 0 && <SelectItem value="" disabled>Loading...</SelectItem>}
                                     {categories.map((cat) => (
                                         <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                                     ))}
@@ -324,10 +384,10 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                        </div>
                    ) : (
                      <div className="flex items-start justify-between gap-2">
-                       <div className="flex-grow">
+                       <div className="flex-grow min-w-0"> {/* Ensure description wraps */}
                          <p className="font-medium break-words">{item.description || <span className="text-muted-foreground italic">No description</span>}</p>
                          <p className="text-sm text-muted-foreground">
-                            {categories.find(c => c.id === item.categoryId)?.name || <span className="text-red-500">No category</span>}
+                            {categories.find(c => c.id === item.categoryId)?.name || <span className="text-red-500">Select category</span>}
                          </p>
                        </div>
                        <div className="flex flex-col items-end flex-shrink-0 pl-2">
@@ -350,9 +410,6 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
               ))}
             </div>
           )}
-           {!isProcessing && file && extractedItems.length === 0 && (
-                 <p className="text-center text-muted-foreground py-10">No items were extracted, or processing failed. Try uploading again or add manually.</p>
-            )}
         </div>
 
         <SheetFooter className="border-t pt-4">
@@ -361,7 +418,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
            </SheetClose>
           <Button
             onClick={handleAddExpenses}
-            disabled={extractedItems.length === 0 || isProcessing || isSaving || isLoadingCategories}
+            disabled={extractedItems.length === 0 || isProcessing || isSaving || isLoadingCategories || processingStatus === ProcessingStatus.Error}
              className="bg-accent hover:bg-accent/90 text-accent-foreground"
           >
             {isSaving ? (

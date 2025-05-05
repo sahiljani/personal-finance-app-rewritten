@@ -1,3 +1,4 @@
+
 "use server";
 
 import { type Expense, type Category, type ExtractedReceiptItem } from "@/lib/types";
@@ -5,7 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { extractReceiptData } from "@/ai/flows/extract-receipt-data"; // Assuming this AI flow exists
+import { extractReceiptData } from "@/ai/flows/extract-receipt-data"; // AI flow now returns categoryId
 
 const expensesFilePath = path.join(process.cwd(), "data", "expenses.json");
 const categoriesFilePath = path.join(process.cwd(), "data", "categories.json");
@@ -161,8 +162,14 @@ export async function addCategory(categoryData: Omit<Category, "id">): Promise<C
 
   const newCategory: Category = {
     ...validatedData,
-    id: validatedData.name.toLowerCase().replace(/\s+/g, "-"), // Simple slug-like ID
+    id: validatedData.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ''), // More robust slug ID
   };
+   // Ensure ID is unique after slugification
+    if (categories.some(c => c.id === newCategory.id)) {
+        newCategory.id = `${newCategory.id}-${Date.now()}`; // Append timestamp if slug conflicts
+    }
+
+
   categories.push(newCategory);
   await writeJsonFile(categoriesFilePath, categories);
   revalidatePath("/"); // Revalidate relevant paths
@@ -215,17 +222,27 @@ export async function deleteCategory(id: string): Promise<void> {
 
 // --- AI Receipt Processing Action ---
 
+/**
+ * Processes a receipt file (image or PDF) using an AI flow to extract items.
+ * @param fileDataUri The receipt file encoded as a data URI.
+ * @returns A promise that resolves to an array of extracted items, including suggested category IDs.
+ */
 export async function processReceiptFile(fileDataUri: string): Promise<ExtractedReceiptItem[]> {
     try {
+        // Call the AI flow which now returns items with categoryId
         const result = await extractReceiptData({ fileDataUri });
-        // Validate the output structure if needed, though the flow should handle its schema
+        // The flow should already validate against its output schema.
+        // Additional validation could happen here if needed.
         return result;
     } catch (error) {
         console.error("Error processing receipt with AI:", error);
         // Provide a user-friendly error message
         if (error instanceof z.ZodError) {
-             throw new Error("Invalid data received from AI processing.");
+             // Log detailed Zod error for debugging if necessary
+             console.error("Zod validation error during AI processing:", error.errors);
+             throw new Error("Invalid data structure received from AI processing.");
         } else if (error instanceof Error) {
+             // Check for specific Genkit/API errors if possible
              throw new Error(`Failed to process receipt: ${error.message}`);
         } else {
             throw new Error("An unknown error occurred while processing the receipt.");
@@ -233,22 +250,53 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
     }
 }
 
-// --- Utility Action (Example: Suggest Category) ---
+// --- Utility Action (Suggest Category for Manual Input) ---
+/**
+ * Suggests a category ID based on the item description using simple rules.
+ * This is used for manual expense entry suggestions.
+ * @param description The description of the expense item.
+ * @returns A suggested category ID string or null if no suggestion is found.
+ */
 export async function suggestCategory(description: string): Promise<string | null> {
-    // Basic keyword-based suggestion (can be improved with AI or history)
     const lowerDescription = description.toLowerCase();
     const categories = await getCategories();
 
-    if (lowerDescription.includes("coffee") || lowerDescription.includes("cafe")) return categories.find(c => c.name.toLowerCase() === 'food & drink')?.id || null;
-    if (lowerDescription.includes("gas") || lowerDescription.includes("fuel")) return categories.find(c => c.name.toLowerCase() === 'transportation')?.id || null;
-    if (lowerDescription.includes("grocery") || lowerDescription.includes("market")) return categories.find(c => c.name.toLowerCase() === 'groceries')?.id || null;
-    if (lowerDescription.includes("rent") || lowerDescription.includes("mortgage")) return categories.find(c => c.name.toLowerCase() === 'housing')?.id || null;
-    // Add more rules...
+    // Define mapping between keywords and category IDs
+    const keywordMap: { [key: string]: string[] } = {
+        'grocery': ['grocery', 'supermarket', 'market', 'milk', 'eggs', 'bread', 'vegetables', 'fruit', 'meat', 'ingredients'],
+        'outside-food': ['coffee', 'cafe', 'restaurant', 'lunch', 'dinner', 'breakfast', 'takeout', 'delivery', 'pizza', 'burger', 'latte', 'sandwich'],
+        'transportation': ['gas', 'fuel', 'taxi', 'uber', 'lyft', 'bus', 'train', 'metro', 'parking'],
+        'clothing': ['shirt', 'pants', 'dress', 'shoes', 'jacket', 'clothing', 'apparel'],
+        'electronics': ['phone', 'laptop', 'computer', 'tv', 'gadget', 'electronics'],
+        'books': ['book', 'magazine', 'newspaper'],
+        'tools': ['hardware', 'tool', 'wrench', 'hammer', 'screw'],
+        'housing': ['rent', 'mortgage', 'hoa'],
+        'utilities': ['electricity', 'water', 'gas bill', 'internet', 'phone bill'],
+        'entertainment': ['movie', 'cinema', 'concert', 'game', 'streaming'],
+        'health': ['pharmacy', 'doctor', 'medicine', 'hospital'],
+        'shopping': ['amazon', 'target', 'walmart', 'mall', 'gift'], // General shopping catch-all
+    };
 
-    // Fallback: Look for past entries (more complex, requires reading expenses)
-    // const expenses = await getExpenses();
-    // const matchingExpense = expenses.find(e => e.description.toLowerCase().includes(keyword));
-    // if (matchingExpense) return matchingExpense.categoryId;
+    // Iterate through categories and their keywords
+    for (const category of categories) {
+        const keywords = keywordMap[category.id];
+        if (keywords) {
+            for (const keyword of keywords) {
+                // Use word boundary check for more accuracy
+                if (new RegExp(`\\b${keyword}\\b`, 'i').test(lowerDescription)) {
+                    return category.id;
+                }
+            }
+        }
+    }
+
+    // Fallback to 'other' if no specific category matched
+    const otherCategory = categories.find(c => c.id === 'other');
+    if (otherCategory && lowerDescription.length > 3) { // Only suggest 'other' if description is somewhat meaningful
+         // Could add more sophisticated fallback logic here, e.g., checking past similar descriptions
+         // return otherCategory.id;
+    }
+
 
     return null; // No suggestion found
 }

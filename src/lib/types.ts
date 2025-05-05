@@ -1,3 +1,4 @@
+
 /**
  * Represents a single expense entry.
  */
@@ -20,10 +21,12 @@ export interface Category {
 }
 
 /**
- * Represents an item extracted from a receipt by AI.
- * Matches the structure from src/services/gemini.ts and src/ai/flows/extract-receipt-data.ts
+ * Represents an item extracted from a receipt by AI, including a suggested category.
+ * Matches the structure from src/ai/flows/extract-receipt-data.ts
  */
 export interface ExtractedReceiptItem {
   description: string;
   amount: number;
+  categoryId: string; // Suggested category ID from AI
 }
+

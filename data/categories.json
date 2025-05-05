@@ -1,13 +1,13 @@
 
 [
   {
-    "id": "food-drink",
-    "name": "Food & Drink",
-    "icon": "Coffee"
+    "id": "outside-food",
+    "name": "Outside Food",
+    "icon": "Utensils"
   },
   {
-    "id": "groceries",
-    "name": "Groceries",
+    "id": "grocery",
+    "name": "Grocery",
     "icon": "ShoppingCart"
   },
   {
@@ -34,6 +34,26 @@
     "id": "shopping",
     "name": "Shopping",
     "icon": "ShoppingBag"
+  },
+   {
+    "id": "clothing",
+    "name": "Clothing",
+    "icon": "Shirt"
+  },
+  {
+    "id": "electronics",
+    "name": "Electronics",
+    "icon": "Smartphone"
+  },
+   {
+    "id": "books",
+    "name": "Books",
+    "icon": "BookOpen"
+  },
+  {
+    "id": "tools",
+    "name": "Tools",
+    "icon": "Wrench"
   },
   {
     "id": "health",
