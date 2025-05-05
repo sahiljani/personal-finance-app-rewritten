@@ -14,31 +14,46 @@ export function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  // --- Debugging ---
+  // Log the values read from environment variables to help diagnose issues.
+  // Remove these logs in production if desired.
+  console.log('Attempting to create Supabase client...');
+  console.log(`NEXT_PUBLIC_SUPABASE_URL read as: ${supabaseUrl}`);
+  console.log(`NEXT_PUBLIC_SUPABASE_ANON_KEY read as: ${supabaseKey ? '*** KEY PRESENT ***' : '!!! KEY MISSING !!!'}`);
+  // --- End Debugging ---
+
+
   // Validate the environment variables more carefully
   if (!supabaseUrl) {
     const errorMsg = 'Missing Supabase URL. Check NEXT_PUBLIC_SUPABASE_URL in .env file. Example: https://your-project-id.supabase.co';
-    console.error(errorMsg);
+    console.error(`Supabase Client Error: ${errorMsg}`); // Log error server-side
     throw new Error(errorMsg);
-  }
-   // Basic check for URL format
-  try {
-    new URL(supabaseUrl);
-  } catch (e) {
-     const errorMsg = `Invalid Supabase URL format: ${supabaseUrl}. Check NEXT_PUBLIC_SUPABASE_URL in .env file. It should look like https://your-project-id.supabase.co`;
-     console.error(errorMsg);
-     throw new Error(errorMsg);
   }
 
   if (!supabaseKey) {
      const errorMsg = 'Missing Supabase Anon Key. Check NEXT_PUBLIC_SUPABASE_ANON_KEY in .env file.';
-     console.error(errorMsg);
+     console.error(`Supabase Client Error: ${errorMsg}`); // Log error server-side
     throw new Error(errorMsg);
   }
 
+   // Basic check for URL format *after* ensuring it's not null/undefined
+  try {
+    new URL(supabaseUrl);
+    console.log('Supabase URL format appears valid.'); // Debug log
+  } catch (e) {
+     const errorMsg = `Invalid Supabase URL format: "${supabaseUrl}". Check NEXT_PUBLIC_SUPABASE_URL in .env file. It should look like https://your-project-id.supabase.co`;
+     console.error(`Supabase Client Error: ${errorMsg}`); // Log error server-side
+     throw new Error(errorMsg);
+  }
+
+   // Removed the check for the placeholder key 'YOUR_SUPABASE_ANON_KEY_HERE'
+   // Supabase client will handle invalid keys internally and return appropriate errors.
+   // Rely on the Supabase error messages ("Invalid API key") if the key is wrong.
 
   // Create a Supabase client with cookie handling for server components/actions
   try {
-      return createServerClient(
+       console.log('Calling createServerClient...'); // Debug log
+       const client = createServerClient(
         supabaseUrl,
         supabaseKey,
         {
@@ -74,10 +89,12 @@ export function createClient() {
           // },
         }
       );
+      console.log('Supabase client created successfully.'); // Debug log
+      return client;
   } catch (error) {
       console.error("Failed to create Supabase client:", error);
       // Rethrow or handle the error appropriately
-       throw new Error("Supabase client initialization failed. Check console logs and environment variables.");
+       throw new Error(`Supabase client initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}. Check console logs and environment variables.`);
   }
 }
 
