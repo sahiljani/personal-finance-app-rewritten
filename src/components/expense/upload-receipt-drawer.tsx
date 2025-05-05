@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -45,7 +46,7 @@ enum ProcessingStatus {
     CategoriesLoaded = 'categories_loaded', // Categories loaded, ready to process
     Processing = 'processing',
     Success = 'success', // Processing successful, items displayed
-    Error = 'error', // Processing failed
+    Error = 'error', // Processing failed or categories failed to load
     NoItemsFound = 'no_items_found' // Processing succeeded, but AI found no items
 }
 
@@ -56,8 +57,6 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
   const [isSaving, setIsSaving] = React.useState(false);
   const [extractedItems, setExtractedItems] = React.useState<EditableItem[]>([]);
   const [categories, setCategories] = React.useState<Category[]>([]);
-  // No longer need separate isLoadingCategories state, use processingStatus
-  // const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   // Store original state for cancellation
@@ -71,26 +70,29 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
             return;
         }
         setProcessingStatus(ProcessingStatus.LoadingCategories); // Set status to loading
+        setErrorMessage(null); // Clear previous errors
         try {
             const fetchedCategories = await getCategories();
+            // Check if the fetched array is empty
             if (fetchedCategories.length === 0) {
-                 toast({ title: "No Categories Found", description: "Please add categories in Settings first.", variant: "destructive", duration: 5000 });
+                 const noCatMsg = "No expense categories found. Please add some categories in the settings before processing receipts.";
+                 toast({ title: "Setup Required", description: noCatMsg, variant: "destructive", duration: 7000 });
                  setProcessingStatus(ProcessingStatus.Error); // Treat as error if no categories
-                 setErrorMessage("No categories available.");
+                 setErrorMessage(noCatMsg);
                  setCategories([]);
-                 // Consider closing the drawer or disabling functionality
+                 // Optionally disable upload functionality here or show a specific UI state
             } else {
                 setCategories(fetchedCategories);
                 setProcessingStatus(ProcessingStatus.CategoriesLoaded); // Move to next state
             }
         } catch (error) {
             console.error("Failed to fetch categories:", error);
-            toast({ title: "Error Loading Categories", description: "Could not load categories. Please try again.", variant: "destructive" });
+            const errMsg = error instanceof Error ? error.message : "Could not load categories.";
+            toast({ title: "Error Loading Categories", description: errMsg, variant: "destructive" });
             setProcessingStatus(ProcessingStatus.Error); // Set error state
-            setErrorMessage("Failed to load categories.");
-             setCategories([]);
+            setErrorMessage(errMsg);
+            setCategories([]);
         }
-        // No finally block setting state here, handled by success/error cases
     }
     fetchCategories();
   }, [open, toast]); // Only depends on 'open' and 'toast'
@@ -133,8 +135,17 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
       setFile(selectedFile);
       setExtractedItems([]);
       setOriginalItems([]);
-      // Keep current processing status (e.g., CategoriesLoaded)
-      setErrorMessage(null);
+       // Reset status only if it was an error state related to category loading
+       if (processingStatus === ProcessingStatus.Error && errorMessage?.includes("categor")) {
+           setProcessingStatus(ProcessingStatus.CategoriesLoaded); // Assume categories are loaded now, ready for upload
+           setErrorMessage(null);
+       } else if (processingStatus === ProcessingStatus.NoItemsFound || processingStatus === ProcessingStatus.Success) {
+           // If processing was done, allow reprocessing
+           setProcessingStatus(ProcessingStatus.CategoriesLoaded);
+           setErrorMessage(null);
+       }
+      // Keep current processing status if it's LoadingCategories or CategoriesLoaded
+      // setErrorMessage(null); // Clear error message when a new file is selected? Maybe not if it's a category error.
     } else {
         // If no file selected (e.g., user cancels file dialog)
         setFile(null);
@@ -146,14 +157,21 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
       toast({ title: "No File", description: "Please select a receipt file.", variant: "destructive" });
       return;
     }
-    // Ensure categories are loaded before proceeding
-    if (processingStatus !== ProcessingStatus.CategoriesLoaded && processingStatus !== ProcessingStatus.Success && processingStatus !== ProcessingStatus.NoItemsFound && processingStatus !== ProcessingStatus.Error) {
+    // Ensure categories are loaded and available before proceeding
+    if (processingStatus === ProcessingStatus.LoadingCategories) {
         toast({ title: "Still Initializing", description: "Categories are loading, please wait.", variant: "default" });
         return;
     }
-     if (categories.length === 0) {
-         toast({ title: "No Categories", description: "Cannot process receipt without categories.", variant: "destructive" });
+    if (processingStatus === ProcessingStatus.Error && errorMessage?.includes("categor")) {
+         toast({ title: "Setup Required", description: errorMessage, variant: "destructive" });
          return;
+    }
+     if (categories.length === 0 && processingStatus !== ProcessingStatus.LoadingCategories) {
+          const noCatMsg = "No expense categories found. Please add some categories in the settings before processing receipts.";
+          toast({ title: "Setup Required", description: noCatMsg, variant: "destructive", duration: 7000 });
+          setErrorMessage(noCatMsg);
+          setProcessingStatus(ProcessingStatus.Error);
+          return;
      }
 
 
@@ -170,7 +188,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
              setProcessingStatus(ProcessingStatus.NoItemsFound);
              // Display Alert below, no separate toast needed unless preferred
         } else {
-            const defaultCategoryId = categories.find(c => c.id === 'other')?.id || categories[0]?.id || '';
+            const defaultCategoryId = categories.find(c => c.id === 'other')?.id || categories[0].id; // Fallback to first category ID
             const itemsWithTempIds = results.map((item, index) => ({
                 ...item,
                 amount: Number(item.amount) || 0, // Ensure amount is a number
@@ -260,12 +278,12 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
       return;
     }
 
-     const invalidItem = extractedItems.find(item => item.isEditing || !item.categoryId || !item.description || !item.amount || item.amount <= 0);
+     const invalidItem = extractedItems.find(item => item.isEditing || !item.categoryId || !item.description || item.amount === undefined || item.amount <= 0);
      if (invalidItem) {
           if (invalidItem.isEditing) {
               toast({ title: "Unsaved Changes", description: "Please save or cancel edits before adding expenses.", variant: "destructive" });
           } else {
-             toast({ title: "Validation Error", description: `Ensure all items have description, amount, and category. Issue with: "${invalidItem.description || 'N/A'}"`, variant: "destructive" });
+             toast({ title: "Validation Error", description: `Ensure all items have description, positive amount, and category. Issue with: "${invalidItem.description || 'N/A'}"`, variant: "destructive" });
           }
          return;
      }
@@ -299,7 +317,10 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
   };
 
     // Determine UI states based on processingStatus
-    const isUploadingDisabled = processingStatus === ProcessingStatus.Processing || processingStatus === ProcessingStatus.LoadingCategories || isSaving || !file || categories.length === 0;
+    const isProcessingOrSaving = processingStatus === ProcessingStatus.Processing || isSaving;
+    const isReadyToUpload = file && (processingStatus === ProcessingStatus.CategoriesLoaded || processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.NoItemsFound || (processingStatus === ProcessingStatus.Error && !errorMessage?.includes("categor")));
+    const isUploadButtonDisabled = isProcessingOrSaving || processingStatus === ProcessingStatus.LoadingCategories || !file || (processingStatus === ProcessingStatus.Error && !!errorMessage?.includes("categor"));
+
     const showProcessingIndicator = processingStatus === ProcessingStatus.Processing;
     const showResults = (processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.Error || processingStatus === ProcessingStatus.NoItemsFound) && extractedItems.length > 0;
     const showNoItemsMessage = processingStatus === ProcessingStatus.NoItemsFound && extractedItems.length === 0;
@@ -330,7 +351,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                 onChange={handleFileChange}
                 ref={fileInputRef}
                 className="sr-only" // Hide the default input
-                disabled={isSaving || processingStatus === ProcessingStatus.Processing || processingStatus === ProcessingStatus.LoadingCategories}
+                disabled={isProcessingOrSaving || processingStatus === ProcessingStatus.LoadingCategories}
             />
              {/* Custom styled button/area for file selection */}
              <Label
@@ -338,7 +359,8 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                  className={cn(
                      "flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-lg cursor-pointer bg-card hover:bg-muted transition-colors",
                      "text-muted-foreground hover:text-foreground",
-                     file && "border-primary text-primary" // Style when file is selected
+                     file && "border-primary text-primary", // Style when file is selected
+                     (isProcessingOrSaving || processingStatus === ProcessingStatus.LoadingCategories) && "opacity-50 cursor-not-allowed" // Disabled style
                  )}
              >
                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -364,11 +386,19 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                                    setExtractedItems([]);
                                    setOriginalItems([]);
                                    if (fileInputRef.current) fileInputRef.current.value = "";
-                                   // Reset status if needed, e.g., back to CategoriesLoaded
-                                   if (categories.length > 0) setProcessingStatus(ProcessingStatus.CategoriesLoaded);
-                                   else setProcessingStatus(ProcessingStatus.Idle);
+                                    // Reset status intelligently
+                                   if (processingStatus === ProcessingStatus.Error && errorMessage?.includes("categor")) {
+                                        // Keep error state if it was category related
+                                        setProcessingStatus(ProcessingStatus.Error);
+                                   } else if (categories.length > 0) {
+                                        setProcessingStatus(ProcessingStatus.CategoriesLoaded);
+                                         setErrorMessage(null); // Clear non-category errors
+                                   } else {
+                                        setProcessingStatus(ProcessingStatus.Idle); // Go back to idle if no categories loaded ever
+                                         setErrorMessage(null);
+                                   }
                                }}
-                                disabled={isSaving || processingStatus === ProcessingStatus.Processing}
+                                disabled={isProcessingOrSaving}
                            >
                                Remove File
                            </Button>
@@ -377,10 +407,10 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
              </Label>
 
                {/* Process Button - Only shown when file is selected and ready */}
-                {file && (processingStatus === ProcessingStatus.CategoriesLoaded || processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.Error || processingStatus === ProcessingStatus.NoItemsFound) && (
+                {isReadyToUpload && (
                      <Button
                        onClick={handleUpload}
-                       disabled={isUploadingDisabled}
+                       disabled={isUploadButtonDisabled}
                        className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground"
                        aria-label="Process selected file"
                      >
@@ -389,7 +419,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                        ) : (
                          <Upload className="mr-2 h-4 w-4" />
                        )}
-                       {processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.Error || processingStatus === ProcessingStatus.NoItemsFound ? 'Re-process File' : 'Process File'}
+                       {(processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.NoItemsFound || processingStatus === ProcessingStatus.Error) ? 'Re-process File' : 'Process File'}
                      </Button>
                 )}
 
@@ -418,6 +448,10 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                     <AlertTitle>Error</AlertTitle>
                     <AlertDescription>
                        {errorMessage || "An unknown error occurred."}
+                        {/* Add specific guidance for common errors */}
+                        {errorMessage?.includes("categor") && " Please go to settings to add categories."}
+                        {errorMessage?.includes("42P01") && " Please check database schema setup."}
+                        {errorMessage?.includes("permission denied") && " Please check database RLS policies."}
                     </AlertDescription>
                 </Alert>
             )}
@@ -527,7 +561,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
         {/* Footer - Use ShadCN SheetFooter */}
         <SheetFooter className="px-4 sm:px-6 py-3 border-t flex flex-row justify-between sm:justify-end gap-2 items-center">
            <SheetClose asChild>
-                <Button variant="outline" disabled={isSaving || processingStatus === ProcessingStatus.Processing}>Cancel</Button>
+                <Button variant="outline" disabled={isProcessingOrSaving}>Cancel</Button>
            </SheetClose>
           <Button
             onClick={handleAddExpenses}
@@ -544,3 +578,4 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
     </Sheet>
   );
 }
+
