@@ -1,9 +1,10 @@
 import { getExpenses, getCategories } from "@/lib/actions";
 import { ExpenseList } from "@/components/expense/expense-list";
-import { ExpenseSummary } from "@/components/expense/expense-summary";
+// Removed ExpenseSummary import
 import { ExpenseFilters } from "@/components/expense/expense-filters";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DesktopActions } from "@/components/navigation/desktop-actions"; // Import DesktopActions
 
 export const dynamic = 'force-dynamic'; // Ensure data is fetched fresh on each request
 
@@ -27,14 +28,17 @@ export default async function HomePage({
   ]);
 
   return (
-    <div className="container mx-auto px-4 py-6 md:py-8 flex flex-col gap-6">
-      <h1 className="text-2xl md:text-3xl font-bold text-foreground">Expense Tracker</h1>
+    <div className="container mx-auto px-4 md:px-6 flex flex-col gap-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground">Expenses</h1>
+        {/* Desktop Action Buttons (Add/Upload) - Hidden on mobile */}
+        <DesktopActions />
+      </div>
+
 
       <ExpenseFilters categories={categories} />
 
-      <Suspense fallback={<ExpenseSummarySkeleton />}>
-        <ExpenseSummary expenses={expenses} />
-      </Suspense>
+      {/* Removed ExpenseSummary section */}
 
       <Suspense fallback={<ExpenseListSkeleton />}>
         <ExpenseList initialExpenses={expenses} categories={categories} />
@@ -43,15 +47,7 @@ export default async function HomePage({
   );
 }
 
-function ExpenseSummarySkeleton() {
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Skeleton className="h-48 rounded-lg" />
-            <Skeleton className="h-48 rounded-lg" />
-        </div>
-    )
-}
-
+// Skeleton remains the same for ExpenseList
 function ExpenseListSkeleton() {
     return (
         <div className="space-y-4">

@@ -89,5 +89,47 @@
     "categoryId": "shopping",
     "date": "2025-05-05T17:36:52.676Z",
     "id": "1746466613906-5bqg3g8-4"
+  },
+  {
+    "amount": 3.29,
+    "description": "MILK 1 GAL",
+    "categoryId": "grocery",
+    "date": "2025-05-05T17:46:08.954Z",
+    "id": "1746467170206-3elcjy4-0"
+  },
+  {
+    "amount": 1.16,
+    "description": "BANANAS 2 LB",
+    "categoryId": "grocery",
+    "date": "2025-05-05T17:46:08.954Z",
+    "id": "1746467170207-0ddd358-1"
+  },
+  {
+    "amount": 2.49,
+    "description": "BREAD WHOLE WHEAT",
+    "categoryId": "grocery",
+    "date": "2025-05-05T17:46:08.954Z",
+    "id": "1746467170207-zut2zlo-2"
+  },
+  {
+    "amount": 2.19,
+    "description": "EGGS 12CT LARGE",
+    "categoryId": "grocery",
+    "date": "2025-05-05T17:46:08.954Z",
+    "id": "1746467170207-w0bx7x5-3"
+  },
+  {
+    "amount": 3.99,
+    "description": "TOOTHPASTE COLGATE",
+    "categoryId": "shopping",
+    "date": "2025-05-05T17:46:08.954Z",
+    "id": "1746467170208-u226mvw-4"
+  },
+  {
+    "amount": 12,
+    "description": "Walmart table",
+    "categoryId": "outside-food",
+    "date": "2025-05-05T17:46:45.190Z",
+    "id": "1746467206462-fsk8f33"
   }
 ]
