@@ -26,6 +26,9 @@ interface ExpenseFiltersProps {
   categories: Category[];
 }
 
+// Use a specific non-empty value for the "All Categories" option
+const ALL_CATEGORIES_VALUE = "all";
+
 export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -43,7 +46,8 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
   const [dateTo, setDateTo] = React.useState<Date | undefined>(
     initialDateTo ? parseISO(initialDateTo) : undefined
   );
-   const [categoryId, setCategoryId] = React.useState<string>(initialCategoryId ?? "");
+   // Initialize with ALL_CATEGORIES_VALUE if no specific category is selected
+   const [categoryId, setCategoryId] = React.useState<string>(initialCategoryId ?? ALL_CATEGORIES_VALUE);
 
    // Function to update URL search params
    const updateSearchParams = React.useCallback(() => {
@@ -61,7 +65,8 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
             current.delete("dateTo");
         }
 
-        if (categoryId) {
+        // Only set categoryId param if it's not the "all" value
+        if (categoryId && categoryId !== ALL_CATEGORIES_VALUE) {
             current.set("categoryId", categoryId);
         } else {
             current.delete("categoryId");
@@ -85,7 +90,7 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
   const clearFilters = () => {
     setDateFrom(undefined);
     setDateTo(undefined);
-    setCategoryId("");
+    setCategoryId(ALL_CATEGORIES_VALUE); // Reset category to "all"
     // updateSearchParams will be triggered by useEffect due to state changes
   };
 
@@ -106,7 +111,8 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
         setDateTo(end);
    }
 
-  const areFiltersApplied = !!dateFrom || !!dateTo || !!categoryId;
+   // Filters are applied if dates are set or category is not the default "all"
+   const areFiltersApplied = !!dateFrom || !!dateTo || categoryId !== ALL_CATEGORIES_VALUE;
 
   return (
     <div className="flex flex-col md:flex-row gap-4 md:items-end p-4 border rounded-lg bg-card shadow-sm">
@@ -184,7 +190,8 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
              <SelectValue placeholder="All Categories" />
            </SelectTrigger>
            <SelectContent>
-             <SelectItem value="">All Categories</SelectItem>
+             {/* Use the specific value for "All Categories" */}
+             <SelectItem value={ALL_CATEGORIES_VALUE}>All Categories</SelectItem>
              {categories.map((category) => (
                <SelectItem key={category.id} value={category.id}>
                  {category.name}
