@@ -57,17 +57,19 @@ export function AddExpenseForm({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     // Set default values based on mode, ensure they are defined or empty strings
+    // Default amount to empty string to avoid controlled/uncontrolled issue
     defaultValues: {
-      amount: expenseToEdit?.amount ?? '', // Use '' instead of undefined
+      amount: expenseToEdit?.amount ? String(expenseToEdit.amount) : '', // Use string or empty string
       description: expenseToEdit?.description ?? "",
       categoryId: expenseToEdit?.categoryId ?? "",
     },
   });
 
+
    // Use useEffect to reset form when expenseToEdit changes (e.g., switching from add to edit)
    React.useEffect(() => {
     form.reset({
-      amount: expenseToEdit?.amount ?? '', // Use '' instead of undefined
+      amount: expenseToEdit?.amount ? String(expenseToEdit.amount) : '', // Reset to string or empty string
       description: expenseToEdit?.description ?? "",
       categoryId: expenseToEdit?.categoryId ?? "",
     });
@@ -211,8 +213,7 @@ export function AddExpenseForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                   {/* Ensure a placeholder item exists if field.value might be empty initially */}
-                   {!field.value && <SelectItem value="" disabled>Select a category</SelectItem>}
+                   {/* Removed the problematic SelectItem with value="" */}
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id}>
                        {/* Icon can be added here if available */}
@@ -251,3 +252,4 @@ export function AddExpenseForm({
     </Form>
   );
 }
+
