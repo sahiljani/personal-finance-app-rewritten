@@ -24,9 +24,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { addExpense, updateExpense, suggestCategory } from "@/lib/actions";
+import { addExpense, updateExpense, suggestCategory } from "@/lib/actions"; // Keep suggestCategory action
 import type { Category, Expense } from "@/lib/types";
-import { Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react"; // Import Loader2
 
 const formSchema = z.object({
   amount: z.coerce.number({invalid_type_error: "Amount must be a number."}).positive("Amount must be a positive number."),
@@ -50,10 +50,10 @@ export function AddExpenseForm({
 }: AddExpenseFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [isSuggesting, setIsSuggesting] = React.useState(false);
+  const [isSuggesting, setIsSuggesting] = React.useState(false); // State for suggestion loading
   const isEditMode = !!expenseToEdit;
 
-  // Initialize the form *before* useEffect
+    // Initialize the form *before* useEffect
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     // Set default values based on mode, ensure they are defined or empty strings
@@ -89,20 +89,32 @@ export function AddExpenseForm({
          // Only suggest if not editing, description is reasonable length, and category isn't already set
         if (!isEditMode && description.length > 3 && description.length < 100 && !form.getValues("categoryId")) {
             debounceTimeoutRef.current = setTimeout(async () => {
-                setIsSuggesting(true);
+                setIsSuggesting(true); // Start loading indicator
                 try {
+                    // Call the server action which now uses GenAI
                     const suggestedId = await suggestCategory(description);
-                    // Check if the component is still mounted and form hasn't been reset
+                    // Check if the component is still mounted and form hasn't been reset, and suggestion is valid
                     if (suggestedId && categories.some(c => c.id === suggestedId) && form.getValues("description") === description) {
                          form.setValue("categoryId", suggestedId, { shouldValidate: true });
+                         toast({ // Notify user of suggestion
+                             title: "Category Suggested",
+                             description: `Set category to "${categories.find(c => c.id === suggestedId)?.name}" based on description.`,
+                             duration: 3000,
+                         });
                     }
                 } catch (error) {
                     console.error("Error suggesting category:", error);
                     // Don't bother user with suggestion errors unless critical
+                     toast({
+                         title: "Suggestion Failed",
+                         description: "Could not automatically suggest a category.",
+                         variant: "destructive",
+                         duration: 3000,
+                     });
                 } finally {
-                    setIsSuggesting(false);
+                    setIsSuggesting(false); // Stop loading indicator
                 }
-            }, 500); // 500ms delay
+            }, 800); // 800ms delay after user stops typing
         }
     };
 
@@ -200,9 +212,9 @@ export function AddExpenseForm({
           name="categoryId"
           render={({ field }) => (
             <FormItem>
+                {/* Add loading indicator next to label */}
                 <FormLabel className="flex items-center gap-2">
                     Category
-                    {/* Use ShadCN Loader */}
                     {isSuggesting && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 </FormLabel>
                {/* Use ShadCN Select */}
@@ -231,12 +243,12 @@ export function AddExpenseForm({
         <div className="flex justify-end gap-2 pt-4">
            {onCancel && (
              // Use ShadCN Button variant
-             <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+             <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting || isSuggesting}>
                 Cancel
             </Button>
            )}
            {/* Use ShadCN Button, primary color */}
-          <Button type="submit" disabled={isSubmitting || !form.formState.isDirty || !form.formState.isValid} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+          <Button type="submit" disabled={isSubmitting || isSuggesting || !form.formState.isDirty || !form.formState.isValid} className="bg-primary hover:bg-primary/90 text-primary-foreground">
             {isSubmitting ? (
               <>
                 {/* Use ShadCN Loader */}

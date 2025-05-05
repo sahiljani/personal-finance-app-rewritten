@@ -7,6 +7,7 @@ import path from "path";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { extractReceiptData } from "@/ai/flows/extract-receipt-data"; // AI flow now returns categoryId
+import { suggestCategoryFlow } from "@/ai/flows/suggest-category-flow"; // Import the new Genkit flow
 
 const expensesFilePath = path.join(process.cwd(), "data", "expenses.json");
 const categoriesFilePath = path.join(process.cwd(), "data", "categories.json");
@@ -90,6 +91,7 @@ export async function addExpense(expenseData: Omit<Expense, "id">): Promise<Expe
   expenses.push(newExpense);
   await writeJsonFile(expensesFilePath, expenses);
   revalidatePath("/"); // Revalidate the home page where expenses are listed
+  revalidatePath("/reports"); // Also revalidate reports page
   return newExpense;
 }
 
@@ -109,6 +111,7 @@ export async function addExpensesBatch(expenseDataArray: Omit<Expense, "id">[]):
     const updatedExpenses = [...expenses, ...newExpenses];
     await writeJsonFile(expensesFilePath, updatedExpenses);
     revalidatePath("/"); // Revalidate the home page
+    revalidatePath("/reports"); // Also revalidate reports page
     return newExpenses;
 }
 
@@ -131,6 +134,7 @@ export async function updateExpense(id: string, updates: Partial<Omit<Expense, "
   expenses[index] = fullyValidatedExpense;
   await writeJsonFile(expensesFilePath, expenses);
   revalidatePath("/");
+  revalidatePath("/reports"); // Also revalidate reports page
   return fullyValidatedExpense;
 }
 
@@ -142,6 +146,7 @@ export async function deleteExpense(id: string): Promise<void> {
   }
   await writeJsonFile(expensesFilePath, updatedExpenses);
   revalidatePath("/");
+  revalidatePath("/reports"); // Also revalidate reports page
 }
 
 
@@ -250,53 +255,38 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
     }
 }
 
-// --- Utility Action (Suggest Category for Manual Input) ---
+// --- AI Category Suggestion Action ---
 /**
- * Suggests a category ID based on the item description using simple rules.
- * This is used for manual expense entry suggestions.
+ * Suggests a category ID based on the item description using a Genkit AI flow.
  * @param description The description of the expense item.
- * @returns A suggested category ID string or null if no suggestion is found.
+ * @returns A suggested category ID string or null if no suggestion is made or an error occurs.
  */
 export async function suggestCategory(description: string): Promise<string | null> {
-    const lowerDescription = description.toLowerCase();
+  if (!description || description.trim().length === 0) {
+    return null; // Don't suggest for empty descriptions
+  }
+  try {
+    // Fetch current categories to pass to the flow
     const categories = await getCategories();
+    const categoryList = categories.map(c => ({ id: c.id, name: c.name }));
 
-    // Define mapping between keywords and category IDs
-    const keywordMap: { [key: string]: string[] } = {
-        'grocery': ['grocery', 'supermarket', 'market', 'milk', 'eggs', 'bread', 'vegetables', 'fruit', 'meat', 'ingredients'],
-        'outside-food': ['coffee', 'cafe', 'restaurant', 'lunch', 'dinner', 'breakfast', 'takeout', 'delivery', 'pizza', 'burger', 'latte', 'sandwich'],
-        'transportation': ['gas', 'fuel', 'taxi', 'uber', 'lyft', 'bus', 'train', 'metro', 'parking'],
-        'clothing': ['shirt', 'pants', 'dress', 'shoes', 'jacket', 'clothing', 'apparel'],
-        'electronics': ['phone', 'laptop', 'computer', 'tv', 'gadget', 'electronics'],
-        'books': ['book', 'magazine', 'newspaper'],
-        'tools': ['hardware', 'tool', 'wrench', 'hammer', 'screw'],
-        'housing': ['rent', 'mortgage', 'hoa'],
-        'utilities': ['electricity', 'water', 'gas bill', 'internet', 'phone bill'],
-        'entertainment': ['movie', 'cinema', 'concert', 'game', 'streaming'],
-        'health': ['pharmacy', 'doctor', 'medicine', 'hospital'],
-        'shopping': ['amazon', 'target', 'walmart', 'mall', 'gift'], // General shopping catch-all
-    };
+    // Call the Genkit flow
+    const result = await suggestCategoryFlow({ description, categories: categoryList });
 
-    // Iterate through categories and their keywords
-    for (const category of categories) {
-        const keywords = keywordMap[category.id];
-        if (keywords) {
-            for (const keyword of keywords) {
-                // Use word boundary check for more accuracy
-                if (new RegExp(`\\b${keyword}\\b`, 'i').test(lowerDescription)) {
-                    return category.id;
-                }
-            }
-        }
+    // The flow returns the suggested category ID directly
+    // Validate if the suggested ID actually exists in our current categories
+    if (result.categoryId && categories.some(c => c.id === result.categoryId)) {
+        return result.categoryId;
+    } else {
+        console.warn(`AI suggested category "${result.categoryId}" which is not in the current list.`);
+        // Optionally fallback to 'other' if the suggestion is invalid
+        const otherCategory = categories.find(c => c.id === 'other');
+        return otherCategory?.id || null;
     }
-
-    // Fallback to 'other' if no specific category matched
-    const otherCategory = categories.find(c => c.id === 'other');
-    if (otherCategory && lowerDescription.length > 3) { // Only suggest 'other' if description is somewhat meaningful
-         // Could add more sophisticated fallback logic here, e.g., checking past similar descriptions
-         // return otherCategory.id;
-    }
-
-
-    return null; // No suggestion found
+  } catch (error) {
+    console.error("Error suggesting category with AI:", error);
+    // Handle potential errors from the AI flow
+    // Return null or a default category ID like 'other' if preferred
+    return null;
+  }
 }
