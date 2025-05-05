@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/chart";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts"; // Removed unused Tooltip, Legend
 import { getCategories } from "@/lib/actions"; // Need categories for labels
-import { Loader2 } from "lucide-react"; // Import Loader2
+import { Loader2 } from "lucide-react";
 
 const CHART_COLORS = [
   'hsl(var(--chart-1))',
@@ -86,6 +86,10 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
                 color: CHART_COLORS[index % CHART_COLORS.length],
             };
         });
+        // Ensure 'Other' category exists if used later
+        if (!config["Other"] && expensesByCategory.some(cat => cat.name === "Other")) {
+           config["Other"] = { label: "Other", color: CHART_COLORS[5 % CHART_COLORS.length] };
+        }
         return config;
     }, [expensesByCategory]);
 
@@ -98,11 +102,9 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
         if (otherValue > 0) {
             data.push({ name: "Other", total: otherValue });
         }
-         if (!chartConfig["Other"] && otherValue > 0) {
-           chartConfig["Other"] = { label: "Other", color: CHART_COLORS[5 % CHART_COLORS.length] }; // Ensure 'Other' has a config
-         }
+        // No need to modify chartConfig here, it's done in the chartConfig memo
         return data;
-    }, [expensesByCategory, chartConfig]);
+    }, [expensesByCategory]);
 
 
   if (expenses.length === 0 && !isLoadingCategories) { // Don't show 'no data' while loading
@@ -138,10 +140,10 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
                <CardTitle>Expenses by Category</CardTitle>
                 <CardDescription>Distribution across categories.</CardDescription>
              </CardHeader>
-             <CardContent className="flex-1 pb-0">
+             <CardContent className="flex-1 pb-4"> {/* Adjusted padding */}
                 <ChartContainer
                   config={chartConfig}
-                  className="mx-auto aspect-square max-h-[250px]"
+                  className="mx-auto aspect-square max-h-[300px]" /* Increased max height slightly */
                 >
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart>
@@ -164,21 +166,19 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
                           <Cell key={`cell-${index}`} fill={chartConfig[entry.name]?.color || CHART_COLORS[index % CHART_COLORS.length]} />
                        ))}
                      </Pie>
-                     {/* Optional: Add Legend below chart */}
-                        {/* <ChartLegend
-                            content={<ChartLegendContent nameKey="name" />}
-                            className="-mt-4"
-                        /> */}
+                     {/* Move Legend inside ChartContainer */}
+                      <ChartLegend
+                          content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center mt-4" />} /* Added margin top */
+                          wrapperStyle={{ position: 'relative', marginTop: '1rem' }} /* Adjust styling as needed */
+                      />
                    </PieChart>
                    </ResponsiveContainer>
                  </ChartContainer>
              </CardContent>
-              <CardFooter className="flex-col gap-2 text-sm mt-4">
-                <ChartLegend
-                        content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center"/>}
+             {/* Removed Footer as legend is now inside content */}
+             {/* <CardFooter className="flex-col gap-2 text-sm mt-4">
 
-                />
-            </CardFooter>
+            </CardFooter> */}
            </Card>
         )}
 
