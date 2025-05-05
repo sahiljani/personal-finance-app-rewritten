@@ -28,15 +28,26 @@ export default async function ReportsPage({
   ]);
 
   return (
-    <div className="container mx-auto px-4 md:px-6 flex flex-col gap-6">
-       <div className="flex justify-between items-center">
-         <h1 className="text-2xl md:text-3xl font-bold text-foreground">Reports & Summary</h1>
+    <div className="container mx-auto px-4 md:px-6 flex flex-col gap-4 md:gap-6">
+       {/* Header Section - Minimal Style */}
+       <div className="flex justify-between items-center pt-2"> {/* Added padding-top */}
+         {/* Title matches reference style */}
+         <h1 className="text-xl md:text-2xl font-semibold text-foreground">Reports & Summary</h1>
          {/* Desktop Action Buttons (Add/Upload) - Hidden on mobile */}
          <DesktopActions />
       </div>
 
+      {/* Filters - Keep collapsible */}
       <ExpenseFilters categories={categories} />
 
+       {/* Analytics/Summary Section Header */}
+      <div className="flex justify-between items-center mt-2">
+           <h2 className="text-lg font-medium text-foreground">Analytics</h2>
+           {/* Optional: Add 'View All' link or date range display */}
+           {/* <span className="text-sm text-muted-foreground">For selected period</span> */}
+      </div>
+
+      {/* Expense Summary / Charts */}
       <Suspense fallback={<ExpenseSummarySkeleton />}>
         <ExpenseSummary expenses={expenses} />
       </Suspense>
@@ -51,8 +62,9 @@ export default async function ReportsPage({
 function ExpenseSummarySkeleton() {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            <Skeleton className="h-40 md:h-48 rounded-lg" />
-            <Skeleton className="h-64 md:h-48 rounded-lg" /> {/* Chart might be taller */}
+             {/* Adjusted height and style */}
+            <Skeleton className="h-32 rounded-xl" /> {/* Use rounded-xl */}
+            <Skeleton className="h-56 rounded-xl" /> {/* Use rounded-xl */}
         </div>
     )
 }

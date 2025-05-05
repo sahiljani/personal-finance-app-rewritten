@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", // Added user-scalable=no for more app-like feel
   // Basic PWA meta tags (more needed for full functionality like manifest, service worker)
   manifest: "/manifest.json", // Example: You'd need to create this file
-  themeColor: "#008080", // Match accent color (Teal)
+  themeColor: "#6D28D9", // Match primary color (Purple) - Update if primary changes
   appleMobileWebAppCapable: "yes",
   appleMobileWebAppStatusBarStyle: "default",
 };
@@ -34,9 +34,9 @@ export default function RootLayout({
            {/* Optional: Add a Desktop Header here */}
            {/* <Header /> */}
 
-           {/* Adjust padding: Use pb-20 for bottom nav height, remove md:pb-6 */}
+           {/* Adjust padding: Use pb-24 for new bottom nav height (approx), remove md:pb-6 */}
            {/* Add top padding if using a fixed header */}
-          <main className="flex-grow pt-6 pb-20"> {/* Adjusted padding for bottom nav */}
+          <main className="flex-grow pt-6 pb-24"> {/* Adjusted bottom padding for new nav */}
             {children}
           </main>
           {/* Bottom navigation is primarily for mobile, but could be adapted */}

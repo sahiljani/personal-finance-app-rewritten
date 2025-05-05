@@ -15,20 +15,24 @@ export function DesktopActions() {
     <>
       {/* These buttons are hidden on small screens (mobile), visible on medium and up (desktop) */}
       <div className="hidden md:flex items-center gap-3">
-         {/* Add Button */}
+         {/* Add Button - Uses primary color (purple) */}
          <Button
-            variant="default" // Uses primary color from theme
+            variant="default"
             onClick={() => setIsAddSheetOpen(true)}
             aria-label="Add Manual Expense"
-            size="sm" // Slightly smaller for desktop header/actions
+            size="sm"
          >
             <Plus className="mr-2 h-4 w-4" />
             Add Expense
          </Button>
 
-         {/* Upload Button */}
+         {/* Upload Button - Uses accent style (e.g., outline or secondary) on Desktop */}
          <Button
-            variant="outline" // Use outline or secondary for less emphasis than primary Add
+            // Use outline or secondary for less emphasis than primary Add on desktop
+            // variant="outline"
+            // Or use accent color directly if desired
+             style={{ backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' }}
+             className="hover:bg-accent/90" // Add hover effect manually if needed
             onClick={() => setIsUploadDrawerOpen(true)}
             aria-label="Upload Receipt"
             size="sm"

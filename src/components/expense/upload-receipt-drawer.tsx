@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, Trash2, Edit2, Check, X, AlertCircle, FileWarning } from "lucide-react"; // Added FileWarning
+import { Loader2, Upload, Trash2, Edit2, Check, X, AlertCircle, FileWarning, FileUp } from "lucide-react"; // Added FileUp
 import type { ExtractedReceiptItem, Category, Expense } from "@/lib/types";
 import { processReceiptFile, addExpensesBatch, getCategories } from "@/lib/actions";
 import {
@@ -25,7 +25,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area"; // Import ScrollArea
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils"; // Import cn
 
 type UploadReceiptDrawerProps = {
   open: boolean;
@@ -39,11 +40,13 @@ type EditableItem = ExtractedReceiptItem & {
 };
 
 enum ProcessingStatus {
-    Idle = 'idle',
+    Idle = 'idle', // Ready to select file or has file selected
+    LoadingCategories = 'loading_categories',
+    CategoriesLoaded = 'categories_loaded', // Categories loaded, ready to process
     Processing = 'processing',
-    Success = 'success',
-    Error = 'error',
-    NoItemsFound = 'no_items_found'
+    Success = 'success', // Processing successful, items displayed
+    Error = 'error', // Processing failed
+    NoItemsFound = 'no_items_found' // Processing succeeded, but AI found no items
 }
 
 export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerProps) {
@@ -53,7 +56,8 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
   const [isSaving, setIsSaving] = React.useState(false);
   const [extractedItems, setExtractedItems] = React.useState<EditableItem[]>([]);
   const [categories, setCategories] = React.useState<Category[]>([]);
-  const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
+  // No longer need separate isLoadingCategories state, use processingStatus
+  // const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   // Store original state for cancellation
@@ -62,20 +66,34 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
   // Fetch categories when the drawer opens
   React.useEffect(() => {
     async function fetchCategories() {
-        if (!open) return;
-        setIsLoadingCategories(true);
+        if (!open) {
+            setProcessingStatus(ProcessingStatus.Idle); // Reset status on close
+            return;
+        }
+        setProcessingStatus(ProcessingStatus.LoadingCategories); // Set status to loading
         try {
             const fetchedCategories = await getCategories();
-            setCategories(fetchedCategories);
+            if (fetchedCategories.length === 0) {
+                 toast({ title: "No Categories Found", description: "Please add categories in Settings first.", variant: "destructive", duration: 5000 });
+                 setProcessingStatus(ProcessingStatus.Error); // Treat as error if no categories
+                 setErrorMessage("No categories available.");
+                 setCategories([]);
+                 // Consider closing the drawer or disabling functionality
+            } else {
+                setCategories(fetchedCategories);
+                setProcessingStatus(ProcessingStatus.CategoriesLoaded); // Move to next state
+            }
         } catch (error) {
             console.error("Failed to fetch categories:", error);
             toast({ title: "Error Loading Categories", description: "Could not load categories. Please try again.", variant: "destructive" });
-        } finally {
-            setIsLoadingCategories(false);
+            setProcessingStatus(ProcessingStatus.Error); // Set error state
+            setErrorMessage("Failed to load categories.");
+             setCategories([]);
         }
+        // No finally block setting state here, handled by success/error cases
     }
     fetchCategories();
-  }, [open, toast]);
+  }, [open, toast]); // Only depends on 'open' and 'toast'
 
   // Reset state when drawer closes
   React.useEffect(() => {
@@ -101,18 +119,25 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
 
         if (!allowedTypes.includes(selectedFile.type)) {
             toast({ title: "Invalid File Type", description: "Please upload JPG, PNG, WEBP, or PDF.", variant: "destructive" });
+            setFile(null); // Clear invalid file
+            if (fileInputRef.current) fileInputRef.current.value = "";
             return;
         }
          if (selectedFile.size > maxSize) {
              toast({ title: "File Too Large", description: "Max file size is 10MB.", variant: "destructive" });
+             setFile(null); // Clear invalid file
+             if (fileInputRef.current) fileInputRef.current.value = "";
              return;
          }
 
       setFile(selectedFile);
       setExtractedItems([]);
       setOriginalItems([]);
-      setProcessingStatus(ProcessingStatus.Idle);
+      // Keep current processing status (e.g., CategoriesLoaded)
       setErrorMessage(null);
+    } else {
+        // If no file selected (e.g., user cancels file dialog)
+        setFile(null);
     }
   };
 
@@ -121,10 +146,16 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
       toast({ title: "No File", description: "Please select a receipt file.", variant: "destructive" });
       return;
     }
-    if (isLoadingCategories) {
-        toast({ title: "Loading", description: "Categories are still loading.", variant: "default" });
+    // Ensure categories are loaded before proceeding
+    if (processingStatus !== ProcessingStatus.CategoriesLoaded && processingStatus !== ProcessingStatus.Success && processingStatus !== ProcessingStatus.NoItemsFound && processingStatus !== ProcessingStatus.Error) {
+        toast({ title: "Still Initializing", description: "Categories are loading, please wait.", variant: "default" });
         return;
     }
+     if (categories.length === 0) {
+         toast({ title: "No Categories", description: "Cannot process receipt without categories.", variant: "destructive" });
+         return;
+     }
+
 
     setProcessingStatus(ProcessingStatus.Processing);
     setErrorMessage(null);
@@ -137,29 +168,29 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
 
         if (results.length === 0) {
              setProcessingStatus(ProcessingStatus.NoItemsFound);
-             // Use a specific toast or Alert, not error message state for this case
-             // setErrorMessage("AI could not extract any items from the receipt.");
+             // Display Alert below, no separate toast needed unless preferred
         } else {
             const defaultCategoryId = categories.find(c => c.id === 'other')?.id || categories[0]?.id || '';
             const itemsWithTempIds = results.map((item, index) => ({
                 ...item,
+                amount: Number(item.amount) || 0, // Ensure amount is a number
                 _tempId: `temp-${index}-${Date.now()}`, // Temporary client-side ID
                 isEditing: false,
+                // Validate category ID from AI, fallback to default if invalid
                 categoryId: categories.some(c => c.id === item.categoryId) ? item.categoryId : defaultCategoryId,
             }));
 
             setExtractedItems(itemsWithTempIds);
             setOriginalItems(JSON.parse(JSON.stringify(itemsWithTempIds))); // Deep copy for reset
             setProcessingStatus(ProcessingStatus.Success);
-            toast({ title: "Receipt Processed", description: "Review the extracted items." });
+            // Simple success message
+            // toast({ title: "Receipt Processed", description: "Review the extracted items." });
         }
     } catch (error) {
       console.error("Receipt processing failed:", error);
       const message = error instanceof Error ? error.message : "Could not process the receipt.";
       setErrorMessage(message); // Set error message state for display
       setProcessingStatus(ProcessingStatus.Error);
-      // Toast is optional here as Alert will show
-      // toast({ title: "Processing Failed", description: message, variant: "destructive" });
        setExtractedItems([]);
        setOriginalItems([]);
     }
@@ -196,7 +227,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
    const handleSaveEdit = (tempId: string) => {
         // Perform validation before saving if necessary
          const itemToSave = extractedItems.find(item => item._tempId === tempId);
-         if (!itemToSave?.description || itemToSave.amount <= 0 || !itemToSave.categoryId) {
+         if (!itemToSave?.description || !itemToSave.amount || itemToSave.amount <= 0 || !itemToSave.categoryId) {
              toast({ title: "Invalid Data", description: "Please provide description, positive amount, and category.", variant: "destructive" });
              return;
          }
@@ -225,11 +256,11 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
 
   const handleAddExpenses = async () => {
     if (extractedItems.length === 0) {
-      toast({ title: "No Items", description: "Add items or upload a receipt first.", variant: "destructive" });
+      toast({ title: "No Items", description: "No items to add.", variant: "destructive" });
       return;
     }
 
-     const invalidItem = extractedItems.find(item => item.isEditing || !item.categoryId || !item.description || item.amount <= 0);
+     const invalidItem = extractedItems.find(item => item.isEditing || !item.categoryId || !item.description || !item.amount || item.amount <= 0);
      if (invalidItem) {
           if (invalidItem.isEditing) {
               toast({ title: "Unsaved Changes", description: "Please save or cancel edits before adding expenses.", variant: "destructive" });
@@ -267,76 +298,126 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
     }
   };
 
-    const isProcessing = processingStatus === ProcessingStatus.Processing;
-    const showResults = (processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.Idle || processingStatus === ProcessingStatus.Error) && extractedItems.length > 0; // Show results even if there was an error but we have items
-    const showNoItemsMessage = processingStatus === ProcessingStatus.NoItemsFound;
+    // Determine UI states based on processingStatus
+    const isUploadingDisabled = processingStatus === ProcessingStatus.Processing || processingStatus === ProcessingStatus.LoadingCategories || isSaving || !file || categories.length === 0;
+    const showProcessingIndicator = processingStatus === ProcessingStatus.Processing;
+    const showResults = (processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.Error || processingStatus === ProcessingStatus.NoItemsFound) && extractedItems.length > 0;
+    const showNoItemsMessage = processingStatus === ProcessingStatus.NoItemsFound && extractedItems.length === 0;
     const showErrorAlert = processingStatus === ProcessingStatus.Error && errorMessage;
+    const showLoadingCategories = processingStatus === ProcessingStatus.LoadingCategories;
 
 
   return (
      // Use ShadCN Sheet
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] max-h-[90vh] flex flex-col p-0"> {/* Remove padding */}
-        <SheetHeader className="px-6 pt-6 pb-4 border-b"> {/* Add padding and border */}
+      <SheetContent side="bottom" className="h-[90vh] max-h-[90vh] flex flex-col p-0 rounded-t-2xl"> {/* Add rounding */}
+        <SheetHeader className="px-4 sm:px-6 pt-4 pb-3 border-b"> {/* Adjust padding */}
           <SheetTitle>Upload Receipt</SheetTitle>
           <SheetDescription>
-            Upload image or PDF (max 10MB). AI will extract items.
+            Upload an image or PDF (max 10MB). AI will extract items. Review before saving.
           </SheetDescription>
         </SheetHeader>
 
          {/* Make content scrollable */}
-        <ScrollArea className="flex-grow px-6 py-4">
-          {/* File Input Area */}
-          <div className="mb-6 space-y-2">
-            <Label htmlFor="receipt-upload">Select File</Label>
-            {/* Use Tailwind for layout */}
-            <div className="flex flex-col sm:flex-row gap-2">
-                {/* Use ShadCN Input */}
-               <Input
-                 id="receipt-upload"
-                 type="file"
-                 accept="image/jpeg,image/png,image/webp,application/pdf"
-                 onChange={handleFileChange}
-                 ref={fileInputRef}
-                 className="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
-                 disabled={isProcessing || isLoadingCategories || isSaving}
-               />
-                 {/* Use ShadCN Button */}
-              <Button
-                onClick={handleUpload}
-                disabled={!file || isProcessing || isLoadingCategories || isSaving || processingStatus === ProcessingStatus.Success}
-                className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground"
-                aria-label="Process selected file"
-              >
-                {isProcessing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> // Use Lucide Loader
-                ) : (
-                  <Upload className="mr-2 h-4 w-4" /> // Use Lucide Upload
+        <ScrollArea className="flex-grow px-4 sm:px-6 py-4">
+          {/* File Input Area - Improved Styling */}
+          <div className="mb-4 space-y-3">
+            {/* Visually hidden but accessible input */}
+            <Input
+                id="receipt-upload"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                className="sr-only" // Hide the default input
+                disabled={isSaving || processingStatus === ProcessingStatus.Processing || processingStatus === ProcessingStatus.LoadingCategories}
+            />
+             {/* Custom styled button/area for file selection */}
+             <Label
+                 htmlFor="receipt-upload"
+                 className={cn(
+                     "flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-lg cursor-pointer bg-card hover:bg-muted transition-colors",
+                     "text-muted-foreground hover:text-foreground",
+                     file && "border-primary text-primary" // Style when file is selected
+                 )}
+             >
+                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                     <FileUp className={cn("w-8 h-8 mb-2", file ? "text-primary" : "text-muted-foreground")} />
+                     {file ? (
+                         <p className="mb-1 text-sm font-semibold truncate max-w-xs">{file.name}</p>
+
+                     ) : (
+                         <>
+                           <p className="mb-1 text-sm"><span className="font-semibold">Click to upload</span> or drag & drop</p>
+                           <p className="text-xs">PNG, JPG, WEBP or PDF (MAX. 10MB)</p>
+                         </>
+                     )}
+                      {file && (
+                           <Button
+                               type="button"
+                               variant="ghost"
+                               size="sm"
+                               className="text-xs text-destructive hover:text-destructive/90 h-6 px-1 mt-1"
+                               onClick={(e) => {
+                                   e.preventDefault(); // Prevent label click
+                                   setFile(null);
+                                   setExtractedItems([]);
+                                   setOriginalItems([]);
+                                   if (fileInputRef.current) fileInputRef.current.value = "";
+                                   // Reset status if needed, e.g., back to CategoriesLoaded
+                                   if (categories.length > 0) setProcessingStatus(ProcessingStatus.CategoriesLoaded);
+                                   else setProcessingStatus(ProcessingStatus.Idle);
+                               }}
+                                disabled={isSaving || processingStatus === ProcessingStatus.Processing}
+                           >
+                               Remove File
+                           </Button>
+                       )}
+                 </div>
+             </Label>
+
+               {/* Process Button - Only shown when file is selected and ready */}
+                {file && (processingStatus === ProcessingStatus.CategoriesLoaded || processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.Error || processingStatus === ProcessingStatus.NoItemsFound) && (
+                     <Button
+                       onClick={handleUpload}
+                       disabled={isUploadingDisabled}
+                       className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground"
+                       aria-label="Process selected file"
+                     >
+                       {processingStatus === ProcessingStatus.Processing ? (
+                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                       ) : (
+                         <Upload className="mr-2 h-4 w-4" />
+                       )}
+                       {processingStatus === ProcessingStatus.Success || processingStatus === ProcessingStatus.Error || processingStatus === ProcessingStatus.NoItemsFound ? 'Re-process File' : 'Process File'}
+                     </Button>
                 )}
-                Process File
-              </Button>
-            </div>
-            {file && <p className="text-xs text-muted-foreground mt-1">Selected: {file.name}</p>}
-             {isLoadingCategories && !categories.length && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Loader2 className="h-3 w-3 animate-spin" /> Loading categories...</p>}
+
+                {/* Loading Categories Indicator */}
+                {showLoadingCategories && (
+                    <div className="flex items-center justify-center text-sm text-muted-foreground gap-2 py-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading categories...
+                    </div>
+                )}
           </div>
 
           {/* Processing Indicator */}
-           {isProcessing && (
+           {showProcessingIndicator && (
                 <div className="flex justify-center items-center flex-col gap-2 text-muted-foreground py-10">
-                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" /> {/* Use primary color */}
                     <p>Processing with AI...</p>
-                     <p className="text-xs">(This may take a moment)</p>
+                    <p className="text-xs">(This may take a moment)</p>
                 </div>
             )}
 
             {/* Error Message Alert */}
             {showErrorAlert && (
-                 // Use ShadCN Alert
                  <Alert variant="destructive" className="my-4">
-                    <AlertCircle className="h-4 w-4" /> {/* Use Lucide Icon */}
-                    <AlertTitle>Processing Error</AlertTitle>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
                     <AlertDescription>
-                       {errorMessage}. Try again or add manually.
+                       {errorMessage || "An unknown error occurred."}
                     </AlertDescription>
                 </Alert>
             )}
@@ -344,62 +425,58 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
              {/* No Items Found Message Alert */}
              {showNoItemsMessage && (
                  <Alert variant="default" className="my-4 border-amber-500/50 bg-amber-50 text-amber-900 dark:border-amber-500/60 dark:bg-amber-950 dark:text-amber-200 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
-                     <FileWarning className="h-4 w-4" /> {/* Use relevant Lucide Icon */}
-                     <AlertTitle>No Items Found</AlertTitle>
+                     <FileWarning className="h-4 w-4" />
+                     <AlertTitle>No Items Extracted</AlertTitle>
                      <AlertDescription>
-                         The AI couldn't find items in the receipt. Ensure the image is clear and upright, or add expenses manually.
+                         The AI couldn't find items in the receipt. Ensure the image is clear and upright. You can try processing again or add expenses manually.
                      </AlertDescription>
                  </Alert>
              )}
 
 
-          {/* Extracted Items List */}
+          {/* Extracted Items List - Improved Styling */}
           {showResults && (
-            <div className="space-y-3">
-              <h3 className="font-semibold text-base mb-2">Extracted Items ({extractedItems.length})</h3>
-              {/* <p className="text-sm text-muted-foreground mb-3">Review and edit items before adding.</p> */}
+            <div className="space-y-2">
+              <h3 className="font-semibold text-base mb-2 mt-4">Extracted Items ({extractedItems.length})</h3>
               {extractedItems.map((item) => (
-                 // Use ShadCN Card styles implicitly via border/bg
-                <div key={item._tempId} className="border rounded-md p-3 shadow-sm bg-card relative">
+                <div key={item._tempId} className="border rounded-lg p-3 bg-card relative transition-all duration-150 ease-in-out">
                    {item.isEditing ? (
                        // Editing State Form
                        <div className="space-y-3">
-                           {/* Use grid for better alignment */}
-                           <div className="grid gap-1.5">
-                                <Label htmlFor={`desc-${item._tempId}`} className="text-xs">Description</Label>
+                            <div className="grid gap-1.5">
+                                <Label htmlFor={`desc-${item._tempId}`} className="text-xs font-medium">Description</Label>
                                <Input
                                     id={`desc-${item._tempId}`}
                                     value={item.description}
                                     onChange={(e) => handleItemChange(item._tempId, 'description', e.target.value)}
-                                    className="text-sm h-9" // Smaller height
+                                    className="text-sm h-9"
                                     placeholder="Item description"
                                />
                             </div>
                              <div className="grid grid-cols-2 gap-3">
                                 <div className="grid gap-1.5">
-                                    <Label htmlFor={`amount-${item._tempId}`} className="text-xs">Amount</Label>
+                                    <Label htmlFor={`amount-${item._tempId}`} className="text-xs font-medium">Amount ($)</Label>
                                    <Input
                                         id={`amount-${item._tempId}`}
                                         type="number"
                                         step="0.01"
-                                        value={item.amount}
+                                        value={item.amount || ''} // Handle potential 0 or NaN
                                         onChange={(e) => handleItemChange(item._tempId, 'amount', parseFloat(e.target.value) || 0)}
                                         className="text-sm h-9"
                                         placeholder="0.00"
                                    />
                                 </div>
                                 <div className="grid gap-1.5">
-                                    <Label htmlFor={`cat-${item._tempId}`} className="text-xs">Category</Label>
-                                    {/* Use ShadCN Select */}
+                                    <Label htmlFor={`cat-${item._tempId}`} className="text-xs font-medium">Category</Label>
                                     <Select
                                         value={item.categoryId}
                                         onValueChange={(value) => handleItemChange(item._tempId, 'categoryId', value)}
+                                        disabled={categories.length === 0}
                                     >
                                         <SelectTrigger id={`cat-${item._tempId}`} className="text-sm h-9">
                                             <SelectValue placeholder="Select..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                             {isLoadingCategories && <SelectItem value="" disabled>Loading...</SelectItem>}
                                             {categories.map((cat) => (
                                                 <SelectItem key={cat.id} value={cat.id} className="text-sm">{cat.name}</SelectItem>
                                             ))}
@@ -408,7 +485,7 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                                 </div>
                              </div>
                             {/* Actions positioned absolutely */}
-                            <div className="absolute top-2 right-2 flex gap-1">
+                            <div className="absolute top-1 right-1 flex gap-0.5">
                                  <Button variant="ghost" size="icon" onClick={() => handleCancelEdit(item._tempId)} aria-label="Cancel edit" className="h-7 w-7 text-muted-foreground hover:bg-secondary">
                                     <X className="h-4 w-4"/>
                                 </Button>
@@ -416,28 +493,26 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
                                     <Check className="h-4 w-4"/>
                                 </Button>
                             </div>
-
                        </div>
                    ) : (
-                       // Display State
-                     <div className="flex items-start justify-between gap-2">
-                       <div className="flex-grow min-w-0 pr-16"> {/* Add padding right to avoid overlap */}
-                         <p className="font-medium break-words text-sm">{item.description || <span className="text-muted-foreground italic">No description</span>}</p>
-                         <p className="text-xs text-muted-foreground mt-0.5">
-                            {categories.find(c => c.id === item.categoryId)?.name || <span className="text-red-500">Select category</span>}
+                       // Display State - Cleaner Layout
+                     <div className="flex items-start justify-between gap-3">
+                       <div className="flex-grow min-w-0 pr-14"> {/* Add padding right to avoid overlap with buttons */}
+                         <p className="font-medium break-words text-sm leading-snug">{item.description || <span className="text-muted-foreground italic">No description</span>}</p>
+                         <p className="text-xs text-muted-foreground mt-1">
+                            {categories.find(c => c.id === item.categoryId)?.name || <span className="text-destructive">Select category</span>}
                          </p>
                        </div>
                        <div className="absolute top-2 right-2 flex flex-col items-end flex-shrink-0">
-                         <p className="font-semibold text-sm whitespace-nowrap">
+                         <p className="font-semibold text-sm whitespace-nowrap text-right">
                             ${item.amount?.toFixed(2) ?? '0.00'}
                          </p>
-                          <div className="flex gap-1 mt-1">
-                              {/* Use ShadCN Buttons with Lucide Icons */}
+                          <div className="flex gap-0.5 mt-1">
                             <Button variant="ghost" size="icon" onClick={() => toggleEdit(item._tempId)} className="h-7 w-7 text-muted-foreground hover:text-foreground" aria-label="Edit item">
-                               <Edit2 className="h-4 w-4"/>
+                               <Edit2 className="h-3.5 w-3.5"/>
                             </Button>
                             <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item._tempId)} className="h-7 w-7 text-destructive hover:text-destructive/90" aria-label="Delete item">
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                          </div>
                        </div>
@@ -449,22 +524,20 @@ export function UploadReceiptDrawer({ open, onOpenChange }: UploadReceiptDrawerP
           )}
         </ScrollArea>
 
-        {/* Use ShadCN SheetFooter */}
-        <SheetFooter className="px-6 py-4 border-t flex-row justify-between sm:justify-end gap-2"> {/* Ensure footer items layout correctly */}
+        {/* Footer - Use ShadCN SheetFooter */}
+        <SheetFooter className="px-4 sm:px-6 py-3 border-t flex flex-row justify-between sm:justify-end gap-2 items-center">
            <SheetClose asChild>
-                 {/* Use ShadCN Button */}
-                <Button variant="outline" disabled={isProcessing || isSaving}>Cancel</Button>
+                <Button variant="outline" disabled={isSaving || processingStatus === ProcessingStatus.Processing}>Cancel</Button>
            </SheetClose>
-           {/* Use ShadCN Button */}
           <Button
             onClick={handleAddExpenses}
-            disabled={extractedItems.length === 0 || isProcessing || isSaving || isLoadingCategories || !!extractedItems.find(i=> i.isEditing)}
-             className="bg-primary hover:bg-primary/90 text-primary-foreground" // Use primary color
+            disabled={extractedItems.length === 0 || isSaving || processingStatus === ProcessingStatus.Processing || processingStatus === ProcessingStatus.LoadingCategories || !!extractedItems.find(i=> i.isEditing)}
+             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             {isSaving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> // Use Lucide Loader
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
-            Add Expense(s)
+            Add {extractedItems.length > 0 ? `${extractedItems.length} ` : ''}Expense(s)
           </Button>
         </SheetFooter>
       </SheetContent>
