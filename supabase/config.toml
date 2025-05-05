@@ -1,0 +1,8 @@
+# Supabase project config
+project_id = "nlvlakyebfhclnfykcsw" # From connection string: postgres.nlvlakyebfhclnfykcsw
+
+# The following settings disable automatic CLI updates to maintain stability.
+# You can remove these lines if you want the CLI to auto-update.
+[cli]
+auto_update = false
+skip_update_checks = true
