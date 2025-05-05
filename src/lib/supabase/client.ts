@@ -46,9 +46,7 @@ export function createClient() {
      throw new Error(errorMsg);
   }
 
-   // Removed the check for the placeholder key 'YOUR_SUPABASE_ANON_KEY_HERE'
-   // Supabase client will handle invalid keys internally and return appropriate errors.
-   // Rely on the Supabase error messages ("Invalid API key") if the key is wrong.
+   // Rely on Supabase client to handle invalid keys and return appropriate errors like "Invalid API key"
 
   // Create a Supabase client with cookie handling for server components/actions
   try {

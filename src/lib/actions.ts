@@ -1,4 +1,3 @@
-
 "use server";
 
 import { type Expense, type Category, type ExtractedReceiptItem } from "@/lib/types";
@@ -81,7 +80,8 @@ export async function getExpenses(
 
   if (error) {
     console.error("Error fetching expenses:", error);
-    throw new Error("Could not fetch expenses.");
+    // Provide more specific error context if possible
+    throw new Error(`Could not fetch expenses. ${error.message || '(Check Supabase RLS/Permissions)'}`);
   }
 
   return data?.map(mapExpenseFromDb) ?? [];
@@ -114,7 +114,7 @@ export async function addExpense(expenseData: Omit<Expense, "id" | "receiptUrl">
 
     if (error) {
         console.error("Error adding expense:", error);
-        throw new Error("Could not add expense.");
+        throw new Error(`Could not add expense. ${error.message || '(Check Supabase RLS/Permissions)'}`);
     }
 
     revalidatePath("/");
@@ -150,7 +150,7 @@ export async function addExpensesBatch(expenseDataArray: Omit<Expense, "id" | "r
 
     if (error) {
         console.error("Error adding expenses batch:", error);
-        throw new Error("Could not add expenses batch.");
+        throw new Error(`Could not add expenses batch. ${error.message || '(Check Supabase RLS/Permissions)'}`);
     }
 
     revalidatePath("/");
@@ -207,7 +207,7 @@ export async function updateExpense(id: string, updates: Partial<Omit<Expense, "
         if (error.code === 'PGRST116') { // Resource Not Found
             throw new Error("Expense not found for update.");
         }
-        throw new Error("Could not update expense.");
+        throw new Error(`Could not update expense. ${error.message || '(Check Supabase RLS/Permissions)'}`);
     }
      if (!data) {
          throw new Error("Expense not found after update attempt.");
@@ -227,7 +227,7 @@ export async function deleteExpense(id: string): Promise<void> {
 
     if (error) {
         console.error("Error deleting expense:", error);
-        throw new Error("Could not delete expense.");
+        throw new Error(`Could not delete expense. ${error.message || '(Check Supabase RLS/Permissions)'}`);
     }
     // We can't easily check if a row was actually deleted without another query,
     // but Supabase delete doesn't error if the row doesn't exist with `eq`.
@@ -247,8 +247,10 @@ export async function getCategories(): Promise<Category[]> {
         .order('name', { ascending: true }); // Optional: order by name
 
     if (error) {
+        // Log the detailed error object from Supabase
         console.error("Error fetching categories:", error);
-        throw new Error("Could not fetch categories.");
+        // Throw a more informative error message including details from the Supabase error
+        throw new Error(`Could not fetch categories. ${error.message || '(Check RLS policies)'} ${error.details ? `(${error.details})` : ''}`);
     }
 
     return data?.map(mapCategoryFromDb) ?? [];
@@ -287,7 +289,7 @@ export async function addCategory(categoryData: Omit<Category, "id">): Promise<C
 
     if (error) {
         console.error("Error adding category:", error);
-        throw new Error("Could not add category.");
+        throw new Error(`Could not add category. ${error.message || '(Check Supabase RLS/Permissions)'}`);
     }
 
     revalidatePath("/");
@@ -332,7 +334,7 @@ export async function updateCategory(id: string, updates: Partial<Omit<Category,
          if (error.code === 'PGRST116') {
             throw new Error("Category not found for update.");
         }
-        throw new Error("Could not update category.");
+        throw new Error(`Could not update category. ${error.message || '(Check Supabase RLS/Permissions)'}`);
     }
      if (!data) {
          throw new Error("Category not found after update attempt.");
@@ -353,7 +355,7 @@ export async function deleteCategory(id: string): Promise<void> {
 
      if (expensesError) {
          console.error("Error checking for expenses linked to category:", expensesError);
-         throw new Error("Could not verify if category is in use.");
+         throw new Error(`Could not verify if category is in use. ${expensesError.message}`);
      }
 
      // Use ?.count syntax if available and supported by your Supabase version/types
@@ -373,7 +375,7 @@ export async function deleteCategory(id: string): Promise<void> {
 
     if (error) {
         console.error("Error deleting category:", error);
-        throw new Error("Could not delete category.");
+        throw new Error(`Could not delete category. ${error.message || '(Check Supabase RLS/Permissions)'}`);
     }
 
     revalidatePath("/");
@@ -394,8 +396,10 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
         const validCategoryIds = categories.map(c => c.id);
         // Ensure a valid default exists, even if 'other' is missing
         const defaultCategoryId = categories.find(c => c.id === 'other')?.id || categories[0]?.id;
-        if (!defaultCategoryId) {
-             throw new Error("No categories available to assign as default."); // Critical error if no categories exist
+        if (!defaultCategoryId && categories.length > 0) { // Check if categories array is not empty before throwing
+             throw new Error("No default category ('other' or first category) available to assign.");
+        } else if (categories.length === 0) {
+             throw new Error("No categories found in the database. Cannot process receipt.");
         }
 
 
@@ -415,6 +419,10 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
              console.error("Zod validation error during AI processing:", error.errors);
              throw new Error("Invalid data structure received from AI processing.");
         } else if (error instanceof Error) {
+             // Make error message more user-friendly
+             if (error.message.includes("No categories found")) {
+                 throw new Error("Cannot process receipt: No categories are set up in the application.");
+             }
              throw new Error(`Failed to process receipt: ${error.message}`);
         } else {
             throw new Error("An unknown error occurred while processing the receipt.");
