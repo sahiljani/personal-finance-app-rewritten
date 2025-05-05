@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/chart";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { getCategories } from "@/lib/actions"; // Need categories for labels
+import { Loader2 } from "lucide-react"; // Import Loader2
 
 const CHART_COLORS = [
   'hsl(var(--chart-1))',
@@ -104,7 +105,7 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
     }, [expensesByCategory, chartConfig]);
 
 
-  if (expenses.length === 0) {
+  if (expenses.length === 0 && !isLoadingCategories) { // Don't show 'no data' while loading
      // Optionally return null or a message if there's no data to show
      return null;
     // return <Card><CardContent className="p-4 text-center text-muted-foreground">No expense data for summary.</CardContent></Card>;
@@ -119,8 +120,14 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
           <CardDescription>Summary of expenses for the selected period.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold">${totalExpenses.toFixed(2)}</p>
-           <p className="text-sm text-muted-foreground mt-1">{expenses.length} transaction(s)</p>
+          {isLoadingCategories ? (
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground"/>
+          ) : (
+            <>
+                 <p className="text-3xl font-bold">${totalExpenses.toFixed(2)}</p>
+                <p className="text-sm text-muted-foreground mt-1">{expenses.length} transaction(s)</p>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -214,9 +221,9 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
         )} */}
 
 
-        {isLoadingCategories && (
+        {isLoadingCategories && expenses.length > 0 && ( // Only show loading skeleton if there *are* expenses but categories are loading
              <Card className="shadow-sm flex items-center justify-center min-h-[150px]">
-                <CardContent className="text-center text-muted-foreground">
+                <CardContent className="text-center text-muted-foreground p-4">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2"/>
                     Loading category summary...
                 </CardContent>

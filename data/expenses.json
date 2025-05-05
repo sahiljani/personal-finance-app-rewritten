@@ -1,0 +1,30 @@
+[
+  {
+    "amount": 4.75,
+    "description": "Iced Latte",
+    "categoryId": "other",
+    "date": "2025-05-05T17:22:52.332Z",
+    "id": "1746465773514-neegp70-0"
+  },
+  {
+    "amount": 3.25,
+    "description": "Croissant",
+    "categoryId": "other",
+    "date": "2025-05-05T17:22:52.332Z",
+    "id": "1746465773515-7mrwn0d-1"
+  },
+  {
+    "amount": 4.5,
+    "description": "Bagel w/ Cream Cheese",
+    "categoryId": "other",
+    "date": "2025-05-05T17:22:52.332Z",
+    "id": "1746465773515-7j4amrd-2"
+  },
+  {
+    "amount": 2,
+    "description": "Bottled Water",
+    "categoryId": "other",
+    "date": "2025-05-05T17:22:52.332Z",
+    "id": "1746465773516-6gqs1lj-3"
+  }
+]
