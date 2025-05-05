@@ -35,6 +35,13 @@ export function createClient() {
      console.error(`Supabase Client Error: ${errorMsg}`); // Log error server-side
     throw new Error(errorMsg);
   }
+   // Check for placeholder key specifically
+   if (supabaseKey === 'YOUR_SUPABASE_ANON_KEY_HERE') {
+        const errorMsg = 'Placeholder Supabase Anon Key detected. Please replace YOUR_SUPABASE_ANON_KEY_HERE in your .env file with your actual public anon key from Supabase project settings.';
+        console.error(`Supabase Client Error: ${errorMsg}`); // Log error server-side
+        throw new Error(errorMsg); // Stop execution if placeholder is used
+   }
+
 
    // Basic check for URL format *after* ensuring it's not null/undefined
   try {
@@ -95,4 +102,5 @@ export function createClient() {
        throw new Error(`Supabase client initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}. Check console logs and environment variables.`);
   }
 }
+
 

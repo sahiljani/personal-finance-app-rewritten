@@ -1,6 +1,7 @@
 'use client';
 
-import {getExpenses, getCategories} from '@/lib/actions';
+import {getExpenses, getCategories, createCategoriesTable} from '@/lib/actions';
+import {useSearchParams} from 'next/navigation';
 import {useEffect, useState} from 'react';
 import {ExpenseList} from '@/components/expense/expense-list';
 import {ExpenseFilters} from '@/components/expense/expense-filters';
@@ -11,18 +12,12 @@ import {DesktopActions} from '@/components/navigation/desktop-actions'; // Impor
 
 export const dynamic = 'force-dynamic'; // Ensure data is fetched fresh on each request
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams?: {
-    dateFrom?: string;
-    dateTo?: string;
-    categoryId?: string;
-  };
-}) {
-  const dateFrom = searchParams?.dateFrom;
-  const dateTo = searchParams?.dateTo;
-  const categoryId = searchParams?.categoryId;
+export default async function HomePage() {
+
+  const searchParams = useSearchParams();
+  const dateFrom = searchParams.get('dateFrom') || undefined;
+  const dateTo = searchParams.get('dateTo') || undefined;
+  const categoryId = searchParams.get('categoryId') || undefined;
 
   // Fetch data in parallel
   // Fetch *all* expenses initially for the summary card, filtering happens client-side there
@@ -32,16 +27,27 @@ export default async function HomePage({
     getCategories(),
   ]);
 
-  const [dbStatus, setDbStatus] = useState<boolean | Category[] | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ tableCreated: boolean, getCategories: boolean | Category[] | null } | null>(null);
 
   useEffect(() => {
     const checkDbConnection = async () => {
-      const result = await getCategories();
-      if (result === false) {
-        setDbStatus(false);
+        const tableCreatedResult = await createCategoriesTable();
+        if(tableCreatedResult) {
+          setDbStatus({tableCreated: true, getCategories: null})
+        } else {
+          setDbStatus({tableCreated: false, getCategories: null})
+        }
+
+      const getCategoriesResult = await getCategories();
+
+      if (getCategoriesResult === false) {
+        setDbStatus((prevStatus) => ({...prevStatus, getCategories: false}));
+      } else if(getCategoriesResult === true){
+        setDbStatus((prevStatus) => ({...prevStatus, getCategories: true}));
       } else {
-        setDbStatus(result.length === 0 ? true : result);
+        setDbStatus((prevStatus) => ({...prevStatus, getCategories: getCategoriesResult}));
       }
+
     };
     checkDbConnection();
   }, []);
@@ -60,17 +66,20 @@ export default async function HomePage({
         <DesktopActions />
       </div>
 
-      {dbStatus === true && (
-        <div className="text-yellow-500">Database table not found</div>
+        {dbStatus?.tableCreated === true && (
+            <div className="text-blue-500">Categories table created successfully</div>
       )}
-      {dbStatus === false && (
+        {dbStatus?.tableCreated === false && (
+            <div className="text-red-500">Categories table creation failed</div>
+        )}
+      {dbStatus?.getCategories === true && (
+        <div className="text-yellow-500">Categories table not found</div>
+      )}
+      {dbStatus?.getCategories === false && (
         <div className="text-red-500">Database error</div>
       )}
-      {Array.isArray(dbStatus) && dbStatus.length > 0 && (
+      {Array.isArray(dbStatus?.getCategories) && dbStatus?.getCategories.length > 0 && (
         <div className="text-green-500">Categories found</div>
-      )}
-      {Array.isArray(dbStatus) && dbStatus.length === 0 && (
-        <div className="text-yellow-500">Categories not found</div>
       )}
 
       {/* Today (Compact) Summary Card */}

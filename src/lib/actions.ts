@@ -106,8 +106,8 @@ export async function getExpenses(
            userMessage = "Permission denied fetching expenses. Please check Row Level Security (RLS) policies on the 'expenses' table in Supabase to allow read access.";
        } else if (errorMessage.includes('NetworkError')) {
            userMessage = "Network error: Could not connect to the database.";
-       } else if (errorMessage.includes('Invalid API key')) {
-           userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+       } else if (errorMessage.includes('Invalid API key') || errorMessage.includes('Unauthorized')) {
+           userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
        } else {
            // Fallback using Supabase error details if available
             userMessage += ` ${errorMessage || '(Check Supabase connection/permissions)'}${errorDetails ? ` (${errorDetails})` : ''}`;
@@ -169,8 +169,8 @@ export async function addExpense(expenseData: Omit<Expense, "id" | "receiptUrl">
             userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
         } else if (error.message && error.message.includes('permission denied')) {
              userMessage = "Permission denied adding expense. Check RLS policies on 'expenses'.";
-        } else if (error.message && error.message.includes('Invalid API key')) {
-           userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else if (error.message && (error.message.includes('Invalid API key') || error.message.includes('Unauthorized'))) {
+           userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
         } else {
             userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
         }
@@ -229,8 +229,8 @@ export async function addExpensesBatch(expenseDataArray: Omit<Expense, "id" | "r
              userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
          } else if (error.message && error.message.includes('permission denied')) {
               userMessage = "Permission denied adding expenses batch. Check RLS policies on 'expenses'.";
-         } else if (error.message && error.message.includes('Invalid API key')) {
-            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+         } else if (error.message && (error.message.includes('Invalid API key') || error.message.includes('Unauthorized'))) {
+            userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
          } else {
              userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
          }
@@ -304,7 +304,7 @@ export async function updateExpense(id: string, updates: Partial<Omit<Expense, "
     if (error) {
         console.error("Error updating expense:", error);
         let userMessage = "Could not update expense.";
-        if (error.code === 'PGRST116' || error.message.includes('0 rows') ) { // Resource Not Found (PostgREST code) or message
+         if (error.code === 'PGRST116' || error.message.includes('0 rows') ) { // Resource Not Found (PostgREST code) or message
             userMessage = `Expense with ID ${id} not found for update.`;
         } else if (error.code === '23503') { // Foreign key violation
             userMessage = "Could not update expense: Invalid category selected.";
@@ -312,8 +312,8 @@ export async function updateExpense(id: string, updates: Partial<Omit<Expense, "
              userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
         } else if (error.message && error.message.includes('permission denied')) {
              userMessage = "Permission denied updating expense. Check RLS policies on 'expenses'.";
-        } else if (error.message && error.message.includes('Invalid API key')) {
-             userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else if (error.message && (error.message.includes('Invalid API key') || error.message.includes('Unauthorized'))) {
+             userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
         } else {
             userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
         }
@@ -348,8 +348,8 @@ export async function deleteExpense(id: string): Promise<void> {
              userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
          } else if (error.message && error.message.includes('permission denied')) {
               userMessage = "Permission denied deleting expense. Check RLS policies on 'expenses'.";
-         } else if (error.message && error.message.includes('Invalid API key')) {
-             userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+         } else if (error.message && (error.message.includes('Invalid API key') || error.message.includes('Unauthorized'))) {
+             userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
          } else {
             userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
          }
@@ -381,21 +381,17 @@ export async function getCategories(): Promise<Category[]> {
         const errorHint = error?.hint ?? 'N/A';
         console.error(`Error fetching categories (Message): ${errorMessage}, (Code): ${errorCode}, (Details): ${errorDetails}, (Hint): ${errorHint}`);
 
-        // If table doesn't exist, return empty array instead of throwing error
-        // This allows the UI to show "No categories found" gracefully
-        if (errorCode === '42P01') {
-           console.warn("The 'categories' table was not found. Returning empty array. Please check the database schema setup instructions in README.md and ensure migrations have been applied.");
-           return [];
-        }
 
         // For other errors, construct a user-friendly message and throw
         let userMessage = "Could not fetch categories.";
-        if (errorMessage.includes('permission denied')) { // Check for RLS issues
+         if (errorCode === '42P01') { // PostgreSQL error code for 'undefined_table'
+           userMessage = "Database error: The 'categories' table could not be found. Please check the database schema setup instructions in README.md and ensure migrations have been applied.";
+         } else if (errorMessage.includes('permission denied')) { // Check for RLS issues
            userMessage = "Permission denied fetching categories. Please check Row Level Security (RLS) policies on the 'categories' table in Supabase to allow read access.";
         } else if (errorMessage.includes('NetworkError')) {
            userMessage = "Network error: Could not connect to the database.";
-        } else if (errorMessage.includes('Invalid API key')) {
-            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else if (errorMessage.includes('Invalid API key') || errorMessage.includes('Unauthorized')) {
+            userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
         } else {
             // Fallback using Supabase error details if available
             userMessage += ` ${errorMessage || '(Check Supabase RLS/Permissions)'}${errorDetails ? ` (${errorDetails})` : ''}`;
@@ -435,7 +431,7 @@ export async function addCategory(categoryData: Omit<Category, "id">): Promise<C
          .maybeSingle();
 
       if (existingError && existingError.code !== '42P01') { // Ignore table not found error during check
-          console.error("Error checking for existing category:", existingError);
+           console.error("Error checking for existing category:", existingError);
           // Decide if this is fatal or just a warning
            throw new Error(`Could not verify existing categories. ${existingError.message}`);
       }
@@ -459,8 +455,8 @@ export async function addCategory(categoryData: Omit<Category, "id">): Promise<C
              userMessage = "Database error: The 'categories' table could not be found. Check schema/migrations.";
         } else if (error.message && error.message.includes('permission denied')) {
              userMessage = "Permission denied adding category. Check RLS policies on 'categories'.";
-        } else if (error.message && error.message.includes('Invalid API key')) {
-            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else if (error.message && (error.message.includes('Invalid API key') || error.message.includes('Unauthorized'))) {
+            userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
         } else {
              userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
         }
@@ -542,8 +538,8 @@ export async function updateCategory(id: string, updates: Partial<Omit<Category,
              userMessage = "Database error: The 'categories' table could not be found. Check schema/migrations.";
         } else if (error.message && error.message.includes('permission denied')) {
              userMessage = "Permission denied updating category. Check RLS policies on 'categories'.";
-        } else if (error.message && error.message.includes('Invalid API key')) {
-            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else if (error.message && (error.message.includes('Invalid API key') || error.message.includes('Unauthorized'))) {
+            userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
         } else {
              userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
         }
@@ -605,8 +601,8 @@ export async function deleteCategory(id: string): Promise<void> {
             userMessage = "Database error: The 'categories' table could not be found. Check schema/migrations.";
         } else if (error.message && error.message.includes('permission denied')) {
              userMessage = "Permission denied deleting category. Check RLS policies on 'categories'.";
-        } else if (error.message && error.message.includes('Invalid API key')) {
-            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else if (error.message && (error.message.includes('Invalid API key') || error.message.includes('Unauthorized'))) {
+            userMessage = "Authentication error: Invalid Supabase API key or permissions. Check your .env file and RLS policies.";
         } else {
             userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
         }
@@ -632,8 +628,8 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
 
         // Check if categories array is empty after fetching
         if (categories.length === 0) {
-            console.error("No categories found in the database. Please add categories first.");
-            // Throw a user-friendly error if no categories exist
+            console.error("No categories found in the database. Cannot process receipt without categories.");
+            // Throw a specific error that can be caught in the UI
             throw new Error("No expense categories found. Please add some categories in the settings before processing receipts.");
         }
 
@@ -661,6 +657,9 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
              if (error.message.includes("No expense categories found")) {
                  throw error; // Re-throw the specific error about missing categories
              }
+              if (error.message.includes("Database error:") || error.message.includes("Network error:") || error.message.includes("Authentication error:")){
+                 throw new Error(`Database or connection error prevented receipt processing: ${error.message}`);
+              }
              // Handle other potential errors (e.g., AI service unavailable)
              throw new Error(`Failed to process receipt: ${error.message}`);
         } else {
@@ -712,3 +711,156 @@ export async function suggestCategory(description: string): Promise<string | nul
     return null; // Return null on other errors
   }
 }
+
+// Helper function to check/create tables (example, adjust as needed)
+// This is NOT a robust migration tool. Use Supabase CLI for proper migrations.
+export async function createRequiredTables(): Promise<boolean> {
+    const supabase = createClient();
+
+    // Check/Create Categories Table
+    const createCategoriesQuery = `
+    CREATE TABLE IF NOT EXISTS public.categories (
+        id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+        created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+        name text NOT NULL UNIQUE,
+        icon text
+    );
+    COMMENT ON TABLE public.categories IS 'Stores expense categories defined by users.';
+    ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+    -- Add Basic RLS Policies (adjust if needed)
+    CREATE POLICY "Allow public read access on categories" ON public.categories FOR SELECT USING (true);
+    CREATE POLICY "Allow public modification access on categories" ON public.categories FOR ALL USING (true);
+    `;
+    const { error: catError } = await supabase.rpc('execute_sql', { sql: createCategoriesQuery });
+    if (catError) {
+        console.error("Error ensuring categories table exists:", catError);
+        if (catError.message.includes('permission denied')) {
+            console.error("Hint: The database user might lack permission to create tables. Ensure the user has necessary privileges or create tables manually via Supabase dashboard/CLI.");
+        }
+        return false;
+    } else {
+         console.log("Checked/Created 'categories' table successfully.");
+         // Seed initial categories if table was newly created or empty
+          await seedInitialCategories(supabase);
+    }
+
+
+    // Check/Create Expenses Table
+    const createExpensesQuery = `
+    CREATE TABLE IF NOT EXISTS public.expenses (
+        id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+        created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+        amount numeric NOT NULL CHECK (amount > 0),
+        description text NOT NULL,
+        category_id uuid REFERENCES public.categories(id) ON DELETE RESTRICT, -- Reference categories table
+        date timestamp with time zone NOT NULL,
+        receipt_url text
+    );
+    COMMENT ON TABLE public.expenses IS 'Stores individual expense records.';
+    -- Add Indexes
+    CREATE INDEX IF NOT EXISTS idx_expenses_date ON public.expenses(date);
+    CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON public.expenses(category_id);
+    -- Enable RLS
+    ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+    -- Add Basic RLS Policies (adjust if needed)
+    CREATE POLICY "Allow public read access on expenses" ON public.expenses FOR SELECT USING (true);
+    CREATE POLICY "Allow public modification access on expenses" ON public.expenses FOR ALL USING (true);
+    `;
+     const { error: expError } = await supabase.rpc('execute_sql', { sql: createExpensesQuery });
+    if (expError) {
+        console.error("Error ensuring expenses table exists:", expError);
+         if (expError.message.includes('permission denied')) {
+             console.error("Hint: The database user might lack permission to create tables. Ensure the user has necessary privileges or create tables manually via Supabase dashboard/CLI.");
+         } else if (expError.message.includes('relation "categories" does not exist')) {
+             console.error("Hint: The 'expenses' table depends on 'categories'. Ensure 'categories' table is created first.");
+         }
+        return false;
+    } else {
+         console.log("Checked/Created 'expenses' table successfully.");
+    }
+
+    // Grant necessary permissions if using RLS
+     const grantUsageQuery = `GRANT USAGE ON SCHEMA public TO anon, authenticated;`;
+     const grantSelectCatQuery = `GRANT SELECT ON TABLE public.categories TO anon, authenticated;`;
+     const grantModCatQuery = `GRANT INSERT, UPDATE, DELETE ON TABLE public.categories TO anon, authenticated;`; // Adjust roles as needed
+     const grantSelectExpQuery = `GRANT SELECT ON TABLE public.expenses TO anon, authenticated;`;
+     const grantModExpQuery = `GRANT INSERT, UPDATE, DELETE ON TABLE public.expenses TO anon, authenticated;`; // Adjust roles as needed
+
+     await supabase.rpc('execute_sql', { sql: grantUsageQuery });
+     await supabase.rpc('execute_sql', { sql: grantSelectCatQuery });
+     await supabase.rpc('execute_sql', { sql: grantModCatQuery });
+     await supabase.rpc('execute_sql', { sql: grantSelectExpQuery });
+     await supabase.rpc('execute_sql', { sql: grantModExpQuery });
+     console.log("Applied basic grants for anon/authenticated roles.");
+
+
+    console.log("Database table check/creation process completed.");
+    return true; // Indicate success
+}
+
+// Helper to seed initial categories
+async function seedInitialCategories(supabase: any) {
+    const initialCategories = [
+        { id: 'outside-food', name: 'Outside Food', icon: 'Utensils' },
+        { id: 'grocery', name: 'Grocery', icon: 'ShoppingCart' },
+        { id: 'transportation', name: 'Transportation', icon: 'Car' },
+        { id: 'housing', name: 'Housing', icon: 'Home' },
+        { id: 'utilities', name: 'Utilities', icon: 'Lightbulb' },
+        { id: 'entertainment', name: 'Entertainment', icon: 'Ticket' },
+        { id: 'shopping', name: 'Shopping', icon: 'ShoppingBag' },
+        { id: 'clothing', name: 'Clothing', icon: 'Shirt' },
+        { id: 'electronics', name: 'Electronics', icon: 'Smartphone' },
+        { id: 'books', name: 'Books', icon: 'BookOpen' },
+        { id: 'tools', name: 'Tools', icon: 'Wrench' },
+        { id: 'health', name: 'Health', icon: 'HeartPulse' },
+        { id: 'other', name: 'Other', icon: 'HelpCircle' }
+    ];
+
+    try {
+         const { count } = await supabase.from('categories').select('id', { count: 'exact', head: true });
+
+         if (count === 0) {
+             console.log("Seeding initial categories...");
+             const { error: insertError } = await supabase.from('categories').insert(initialCategories);
+             if (insertError) {
+                  console.error("Error seeding categories:", insertError);
+                  if (insertError.message.includes('permission denied')) {
+                       console.error("Hint: Check RLS insert policy on 'categories' table.");
+                  }
+             } else {
+                 console.log("Initial categories seeded successfully.");
+             }
+         } else {
+             console.log("Categories table already contains data, skipping seed.");
+         }
+    } catch (error) {
+         console.error("Error checking/seeding categories:", error);
+          if (error instanceof Error && error.message.includes('relation "categories" does not exist')) {
+               console.error("Cannot seed categories because the table does not exist.");
+           } else if (error instanceof Error && error.message.includes('permission denied')) {
+                console.error("Permission denied checking/seeding categories. Check RLS policies.");
+           }
+    }
+}
+
+// Add a function to execute raw SQL (Needed for CREATE TABLE etc.)
+// Note: Requires enabling the 'sql' extension in Supabase & possibly admin privileges.
+// Alternatively, use the Supabase CLI or Dashboard SQL Editor for migrations.
+// This function is a workaround and might have security implications if sql string is dynamic.
+// Prefer using Supabase CLI migrations (`supabase db push`).
+async function executeSql(sql: string): Promise<{ data: any; error: any }> {
+    const supabase = createClient();
+    // This assumes you have a function `execute_sql` set up in Supabase
+    // See: https://supabase.com/docs/guides/database/functions#running-sql-statements
+    // Or use a more direct method if available/allowed by your Supabase client version & setup.
+    // WARNING: Directly executing arbitrary SQL from client-side code is a major security risk.
+    // This function should ONLY be used with static, predefined SQL strings in server actions.
+    return await supabase.rpc('execute_sql', { sql }); // Assuming 'execute_sql' function exists
+}
+
+// You might call createRequiredTables on app startup or a specific setup page.
+// Example (call this cautiously, e.g., in a setup route or admin panel):
+// createRequiredTables().then(success => {
+//   if (success) console.log("Database setup check successful.");
+//   else console.error("Database setup check failed.");
+// });

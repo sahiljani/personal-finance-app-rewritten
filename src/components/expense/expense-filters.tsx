@@ -39,11 +39,10 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const params = new URLSearchParams(Array.from(searchParams.entries()));
 
   // Get initial values from URL search params
-  const initialDateFrom = searchParams.get("dateFrom");
-  const initialDateTo = searchParams.get("dateTo");
-  const initialCategoryId = searchParams.get("categoryId");
+  const [initialDateFrom, initialDateTo, initialCategoryId] = [params.get("dateFrom"), params.get("dateTo"), params.get("categoryId")];
 
   // State for controlled components
   const [dateFrom, setDateFrom] = React.useState<Date | undefined>(
@@ -60,8 +59,18 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
    const dateToPopoverOpen = React.useRef(false);
 
    // Function to update URL search params
+    const paramsChanged = (p1: URLSearchParams, p2: URLSearchParams) => {
+      const keys1 = Array.from(p1.keys()).sort();
+      const keys2 = Array.from(p2.keys()).sort();
+
+      if (keys1.length !== keys2.length) return true;
+      if (!keys1.every((key, index) => key === keys2[index])) return true;
+      return keys1.some((key) => p1.get(key) !== p2.get(key));
+    }
+
+
    const updateSearchParams = React.useCallback(() => {
-        const current = new URLSearchParams(Array.from(searchParams.entries()));
+        const current = new URLSearchParams();
 
         if (dateFrom) {
              current.set("dateFrom", format(dateFrom, "yyyy-MM-dd"));
@@ -85,10 +94,10 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
         const query = search ? `?${search}` : "";
 
         // Only push if params actually changed to avoid unnecessary renders
-        if (`${pathname}${query}` !== `${pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`) {
-             router.push(`${pathname}${query}`, { scroll: false });
+        if (paramsChanged(new URLSearchParams(search), new URLSearchParams(query))) {
+             router.push(`${pathname}${query}`);
         }
-   }, [dateFrom, dateTo, categoryId, searchParams, pathname, router]);
+   }, [dateFrom, dateTo, categoryId, searchParams, pathname, router, params]);
 
     // Update URL when filter state changes, but only when the collapsible section is closed or filters are cleared
     // React.useEffect(() => {
@@ -108,7 +117,7 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
     // Update URL immediately on clear
     const current = new URLSearchParams(); // Start fresh
     const query = ""; // No params
-    router.push(`${pathname}${query}`, { scroll: false });
+    router.push(`${pathname}${query}`);
     setIsFilterOpen(false); // Close collapsible on clear
   };
 
@@ -137,7 +146,7 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
        popoverRef.current = false; // Close popover on select
    };
 
-   const areFiltersApplied = !!initialDateFrom || !!initialDateTo || !!initialCategoryId;
+   const areFiltersApplied = !!initialDateFrom || !!initialDateTo || initialCategoryId !== ALL_CATEGORIES_VALUE;
    const filterCount = [initialDateFrom, initialDateTo, initialCategoryId].filter(Boolean).length;
 
   return (

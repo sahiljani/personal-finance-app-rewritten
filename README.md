@@ -1,7 +1,7 @@
 
-# Firebase Studio (Now using Supabase)
+# Expense Tracker Pro (Using Supabase)
 
-This is a Next.js starter app in Firebase Studio, now configured to use Supabase for its database.
+This is a Next.js starter app for tracking expenses, now configured to use Supabase for its database and backend services.
 
 To get started, take a look at `src/app/page.tsx`.
 
@@ -27,6 +27,9 @@ To get started, take a look at `src/app/page.tsx`.
 
     # Optional: Google Generative AI API Key (if using Genkit features)
     # GOOGLE_GENAI_API_KEY=YOUR_GOOGLE_GENAI_API_KEY_HERE
+
+    # Optional: Supabase Service Role Key (Use with extreme caution, primarily for server-side admin tasks, not usually needed for client/app actions)
+    # SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_KEY_HERE
     ```
 
     **Important:** Replace `YOUR_SUPABASE_URL_HERE` and `YOUR_SUPABASE_ANON_KEY_HERE` with your actual credentials from your Supabase project dashboard. **Do not use the placeholder keys.** Using the placeholder keys will result in authentication errors.
@@ -82,20 +85,9 @@ This application expects the following tables in your Supabase database (created
     *   `receipt_url` (text, nullable)
 
 **Row Level Security (RLS):**
-The initial migration enables RLS on both tables but does not define policies by default (unless you uncomment the example policies). This means **no data can be accessed** until you define appropriate policies.
+The initial migration enables RLS on both tables and includes example policies for public access (suitable for initial testing). These allow anyone to read, insert, update, and delete data.
 
-*   **For initial testing without authentication:** You can create simple `SELECT` policies allowing all access in the Supabase dashboard under Authentication > Policies. Example:
-    ```sql
-    -- In Supabase SQL Editor
-    CREATE POLICY "Allow public read access on categories" ON public.categories FOR SELECT USING (true);
-    CREATE POLICY "Allow public read access on expenses" ON public.expenses FOR SELECT USING (true);
-    -- You'll also need INSERT/UPDATE/DELETE policies for full functionality
-    CREATE POLICY "Allow public insert access" ON public.expenses FOR INSERT WITH CHECK (true);
-    CREATE POLICY "Allow public update access" ON public.expenses FOR UPDATE USING (true);
-    CREATE POLICY "Allow public delete access" ON public.expenses FOR DELETE USING (true);
-    -- (Similar policies for categories if needed)
-    ```
-*   **With Authentication:** Define policies based on `auth.uid()` to restrict access to the logged-in user. See comments in the migration file for examples.
+*   **For Production with Authentication:** You **MUST** replace the public policies with stricter ones based on `auth.uid()` to restrict access to logged-in users and their own data. See the commented-out examples in the migration file (`supabase/migrations/0000_init_schema.sql`) for guidance. Remove the public `INSERT`, `UPDATE`, `DELETE` policies if anonymous users should not modify data.
 
 ## Genkit (Optional AI Features)
 
