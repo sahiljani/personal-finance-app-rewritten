@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -11,12 +12,11 @@ import {
   ChartLegend,
   ChartLegendContent
 } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"; // Removed unused imports
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { getCategories } from "@/lib/actions";
 import { Loader2 } from "lucide-react";
 
 // Use CHART_COLORS defined in globals.css via CSS variables
-// This array is primarily for mapping data indices to chart config keys if needed
 const BASE_CHART_COLORS = [
   '--chart-1',
   '--chart-2',
@@ -55,60 +55,48 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
   const expensesByCategory = React.useMemo(() => {
     if (isLoadingCategories || categories.length === 0) return [];
 
-    const categoryMap: { [key: string]: { name: string; value: number; fill: string; } } = {}; // Add fill property
+    const categoryMap: { [key: string]: { name: string; value: number; fill: string; } } = {};
 
-     const otherCategoryId = categories.find(c => c.id === 'other')?.id || 'other'; // Ensure 'other' exists
+     const otherCategoryId = categories.find(c => c.id === 'other')?.id || 'other';
 
     categories.forEach((cat, index) => {
-      // Assign a CSS variable color from the theme
        const colorVar = BASE_CHART_COLORS[index % BASE_CHART_COLORS.length];
       categoryMap[cat.id] = { name: cat.name, value: 0, fill: `hsl(var(${colorVar}))` };
     });
 
-     // Ensure 'other' category has a color assigned if it wasn't in the initial list somehow
     if (!categoryMap[otherCategoryId]) {
          const otherIndex = categories.length % BASE_CHART_COLORS.length;
          categoryMap[otherCategoryId] = { name: 'Other', value: 0, fill: `hsl(var(${BASE_CHART_COLORS[otherIndex]}))` };
     }
 
-
     expenses.forEach((expense) => {
-      if (categoryMap[expense.categoryId]) {
-        categoryMap[expense.categoryId].value += expense.amount;
-      } else {
-         // Assign to 'other' if categoryId is unknown
-         if (categoryMap[otherCategoryId]) {
-             categoryMap[otherCategoryId].value += expense.amount;
-         }
+      const categoryIdToUse = categoryMap[expense.categoryId] ? expense.categoryId : otherCategoryId;
+      if(categoryMap[categoryIdToUse]){ // Check if exists after potential fallback
+          categoryMap[categoryIdToUse].value += expense.amount;
       }
     });
 
-    // Filter out categories with zero expenses and sort by value descending
     return Object.values(categoryMap)
                  .filter(cat => cat.value > 0)
                  .sort((a, b) => b.value - a.value);
 
   }, [expenses, categories, isLoadingCategories]);
 
-   // Generate chartConfig dynamically based on filtered/sorted data
    const chartConfig = React.useMemo(() => {
         const config: ChartConfig = {};
         expensesByCategory.forEach((item) => {
-            config[item.name] = { // Use name as key for chart config
+            config[item.name] = {
                 label: item.name,
-                color: item.fill, // Use the pre-assigned fill color
+                color: item.fill,
             };
         });
         return config;
     }, [expensesByCategory]);
 
-
-  // No need to show anything if loading or no expenses
   if (isLoadingCategories || expenses.length === 0) {
-     // Display loading state or empty state appropriately
      return (
          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-             <Card className="shadow-sm min-h-[150px] flex items-center justify-center">
+             <Card className="shadow-md rounded-2xl min-h-[150px] flex items-center justify-center"> {/* Updated styling */}
                  <CardContent className="p-6 text-center">
                      {isLoadingCategories ? (
                          <>
@@ -116,12 +104,11 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
                             <p className="text-muted-foreground">Loading summary...</p>
                          </>
                      ) : (
-                         <p className="text-muted-foreground">No expenses found for the selected period.</p>
+                         <p className="text-muted-foreground">No expenses found.</p>
                      )}
                  </CardContent>
              </Card>
-             {/* Placeholder for the chart card while loading/empty */}
-             <Card className="shadow-sm min-h-[150px] flex items-center justify-center">
+             <Card className="shadow-md rounded-2xl min-h-[150px] flex items-center justify-center"> {/* Updated styling */}
                  <CardContent className="p-6 text-center">
                       {isLoadingCategories ? (
                          <>
@@ -129,7 +116,7 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
                             <p className="text-muted-foreground">Loading chart...</p>
                          </>
                       ) : (
-                         <p className="text-muted-foreground">No expense data to display chart.</p>
+                         <p className="text-muted-foreground">No expense data.</p>
                       )}
                  </CardContent>
              </Card>
@@ -137,36 +124,33 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
      );
   }
 
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
       {/* Total Expenses Card */}
-      <Card className="shadow-sm">
-        <CardHeader>
-          {/* Updated heading hierarchy */}
-          <CardTitle className="text-lg font-semibold">Total Expenses</CardTitle>
-          <CardDescription>Summary for the selected period.</CardDescription>
+      <Card className="shadow-md rounded-2xl"> {/* Updated styling */}
+        <CardHeader className="pb-2"> {/* Reduced padding */}
+          <CardTitle className="text-base font-semibold">Total Expenses</CardTitle> {/* Smaller title */}
+          <CardDescription className="text-xs">Summary for the selected period.</CardDescription> {/* Smaller description */}
         </CardHeader>
-        <CardContent className="pt-2"> {/* Adjust padding */}
+        <CardContent className="pt-2">
             <>
-                 <p className="text-3xl font-bold">${totalExpenses.toFixed(2)}</p>
-                <p className="text-sm text-muted-foreground mt-1">{expenses.length} transaction(s)</p>
+                 <p className="text-2xl font-bold">${totalExpenses.toFixed(2)}</p> {/* Slightly smaller amount */}
+                <p className="text-xs text-muted-foreground mt-1">{expenses.length} transaction(s)</p>
             </>
         </CardContent>
       </Card>
 
       {/* Expenses by Category Pie Chart */}
        {expensesByCategory.length > 0 && (
-          <Card className="shadow-sm flex flex-col">
-             <CardHeader>
-               {/* Updated heading hierarchy */}
-               <CardTitle className="text-lg font-semibold">Expenses by Category</CardTitle>
-                <CardDescription>Distribution across categories.</CardDescription>
+          <Card className="shadow-md rounded-2xl flex flex-col"> {/* Updated styling */}
+             <CardHeader className="pb-2"> {/* Reduced padding */}
+               <CardTitle className="text-base font-semibold">Expenses by Category</CardTitle> {/* Smaller title */}
+                <CardDescription className="text-xs">Distribution across categories.</CardDescription> {/* Smaller description */}
              </CardHeader>
-             <CardContent className="flex-1 pb-4 pt-2"> {/* Adjust padding */}
+             <CardContent className="flex-1 pb-0 pt-0"> {/* Adjusted padding */}
                 <ChartContainer
                   config={chartConfig}
-                   className="mx-auto aspect-square max-h-[250px]" // Slightly smaller max height
+                   className="mx-auto aspect-square max-h-[280px]" // Adjusted height
                 >
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart>
@@ -180,30 +164,29 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
                        nameKey="name"
                        cx="50%"
                        cy="50%"
-                       outerRadius={80}
-                       innerRadius={50} // Donut chart
-                       strokeWidth={2}
-                       // Fill is handled by Cell component using chartConfig
+                       outerRadius={70} // Slightly smaller radius
+                       innerRadius={45}
+                       strokeWidth={1} // Thinner stroke
                      >
                        {expensesByCategory.map((entry) => (
-                          // Use the color defined in chartConfig
                           <Cell key={`cell-${entry.name}`} fill={chartConfig[entry.name]?.color} />
                        ))}
                      </Pie>
-                     {/* Legend moved inside ChartContainer */}
-                      <ChartLegend
-                          content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center !mt-4 text-xs" />} // Use smaller text, adjust margin
+                     {/* Legend positioned below */}
+                     <ChartLegend
+                         content={<ChartLegendContent nameKey="name" className="flex-wrap justify-center !mt-2 text-xs" />} // Adjusted margin
                       />
                    </PieChart>
                    </ResponsiveContainer>
                  </ChartContainer>
              </CardContent>
+             {/* Footer removed as Legend is inside Content now */}
            </Card>
         )}
 
        {/* Card Placeholder if no category data */}
-        {expensesByCategory.length === 0 && (
-             <Card className="shadow-sm min-h-[150px] flex items-center justify-center">
+        {expensesByCategory.length === 0 && expenses.length > 0 && ( // Only show if there are expenses but no category data for chart
+             <Card className="shadow-md rounded-2xl min-h-[150px] flex items-center justify-center"> {/* Updated styling */}
                  <CardContent className="p-6 text-center">
                     <p className="text-muted-foreground">No category data to display chart.</p>
                  </CardContent>

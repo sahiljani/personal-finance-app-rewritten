@@ -13,10 +13,10 @@ export const metadata: Metadata = {
   title: "Expense Tracker Pro",
   description: "Track your expenses efficiently.",
   // Add viewport meta tag for mobile responsiveness
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", // Added user-scalable=no for more app-like feel
   // Basic PWA meta tags (more needed for full functionality like manifest, service worker)
   manifest: "/manifest.json", // Example: You'd need to create this file
-  themeColor: "#ffffff", // Example theme color
+  themeColor: "#008080", // Match accent color (Teal)
   appleMobileWebAppCapable: "yes",
   appleMobileWebAppStatusBarStyle: "default",
 };
@@ -34,12 +34,12 @@ export default function RootLayout({
            {/* Optional: Add a Desktop Header here */}
            {/* <Header /> */}
 
-           {/* Adjust padding: Keep bottom padding for mobile nav, remove for desktop */}
+           {/* Adjust padding: Use pb-20 for bottom nav height, remove md:pb-6 */}
            {/* Add top padding if using a fixed header */}
-          <main className="flex-grow pb-24 pt-6 md:pb-6"> {/* Added pt-6 for general spacing */}
+          <main className="flex-grow pt-6 pb-20"> {/* Adjusted padding for bottom nav */}
             {children}
           </main>
-          {/* Bottom navigation is only for mobile */}
+          {/* Bottom navigation is primarily for mobile, but could be adapted */}
           <BottomNavigation />
           <Toaster />
         </AppProviders>
