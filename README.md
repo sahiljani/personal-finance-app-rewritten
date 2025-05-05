@@ -29,12 +29,17 @@ To get started, take a look at `src/app/page.tsx`.
     # GOOGLE_GENAI_API_KEY=YOUR_GOOGLE_GENAI_API_KEY_HERE
     ```
 
-    **Important:** Replace `YOUR_SUPABASE_URL_HERE` and `YOUR_SUPABASE_ANON_KEY_HERE` with your actual credentials from your Supabase project dashboard. **Do not use the placeholder keys.**
+    **Important:** Replace `YOUR_SUPABASE_URL_HERE` and `YOUR_SUPABASE_ANON_KEY_HERE` with your actual credentials from your Supabase project dashboard. **Do not use the placeholder keys.** Using the placeholder keys will result in authentication errors.
 
 3.  **Set up Database Schema:**
-    The application requires specific tables in your Supabase database. You need to create these tables by running the SQL commands found in the `supabase/migrations` directory.
 
-    **Option 1: Using Supabase Dashboard SQL Editor**
+    **🚨 CRITICAL STEP: You MUST create the database tables before running the app! 🚨**
+
+    The application requires specific tables (`categories`, `expenses`) in your Supabase database. If these tables do not exist, you will encounter "relation does not exist" errors, and the app **will not function**.
+
+    Run the SQL commands found in the `supabase/migrations` directory using **one** of the options below:
+
+    **Option 1: Using Supabase Dashboard SQL Editor (Recommended for Beginners)**
     *   Go to your Supabase project dashboard.
     *   Navigate to the **SQL Editor** section.
     *   Click on "**New query**".
@@ -107,3 +112,4 @@ If you plan to use the AI features (receipt scanning, category suggestion):
     # or use watch mode
     # npm run genkit:watch
     ```
+

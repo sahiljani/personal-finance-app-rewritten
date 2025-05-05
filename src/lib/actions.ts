@@ -97,7 +97,7 @@ export async function getExpenses(
     // Provide more specific error context if possible
     let userMessage = "Could not fetch expenses.";
     if (error.code === '42P01') { // PostgreSQL error code for 'undefined_table'
-      userMessage = "Database error: The 'expenses' table could not be found. Please check the database schema and ensure the table exists and migrations are applied.";
+      userMessage = "Database error: The 'expenses' table could not be found. Please check the database schema setup instructions in README.md and ensure migrations have been applied.";
     } else if (error.message.includes('permission denied')) { // Check for RLS issues
       userMessage = "Permission denied fetching expenses. Please check Row Level Security (RLS) policies on the 'expenses' table in Supabase to allow read access.";
     } else if (error.message.includes('NetworkError')) {
@@ -345,7 +345,7 @@ export async function getCategories(): Promise<Category[]> {
         // Provide more specific error context if possible
         let userMessage = "Could not fetch categories.";
         if (error.code === '42P01') { // PostgreSQL error code for 'undefined_table'
-           userMessage = "Database error: The 'categories' table could not be found. Please check the database schema and ensure the table exists and migrations are applied.";
+           userMessage = "Database error: The 'categories' table could not be found. Please check the database schema setup instructions in README.md and ensure migrations have been applied.";
         } else if (error.message.includes('permission denied')) { // Check for RLS issues
            userMessage = "Permission denied fetching categories. Please check Row Level Security (RLS) policies on the 'categories' table in Supabase to allow read access.";
         } else if (error.message.includes('NetworkError')) {
