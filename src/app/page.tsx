@@ -1,7 +1,6 @@
-
 'use client';
 
-import { getExpenses, getCategories, createRequiredTables } from '@/lib/actions'; // Updated import
+import { getExpenses, getCategories, createRequiredTables } from '@/lib/actions'; // Use createRequiredTables
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ExpenseList } from '@/components/expense/expense-list';
@@ -10,7 +9,7 @@ import { ExpenseSummaryCard } from '@/components/expense/expense-summary-card'; 
 import { Suspense } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DesktopActions } from '@/components/navigation/desktop-actions'; // Import DesktopActions
-import type { Category } from '@/lib/types'; // Import Category type
+import type { Category, Expense } from '@/lib/types'; // Import types
 
 export const dynamic = 'force-dynamic'; // Ensure data is fetched fresh on each request
 
@@ -25,59 +24,64 @@ function HomePageContent() {
   const [filteredExpenses, setFilteredExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [dbStatus, setDbStatus] = useState<{ tableCreated: boolean | null, getCategories: boolean | Category[] | null } | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ setupOk: boolean | null, categoriesOk: boolean | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkDbConnectionAndFetchData = async () => {
       setIsLoading(true);
       setError(null); // Reset error state
-      try {
-        // 1. Check/Create Tables and Seed Categories
-        const tableCreationSuccess = await createRequiredTables(); // Use the correct function name
-        setDbStatus({ tableCreated: tableCreationSuccess, getCategories: null });
+      let setupCheckPassed = null; // Track setup status
 
-        if (!tableCreationSuccess) {
-             console.warn("Database table check/creation failed. Data fetching might fail.");
-             // Optionally set an error state here if table creation is critical
-             // setError("Database setup failed. Please check the console.");
-             // setIsLoading(false); // Stop loading if setup fails critically
-             // return;
+      try {
+        // 1. Check/Seed Tables (This function now primarily checks and seeds)
+        console.log("Checking database setup...");
+        setupCheckPassed = await createRequiredTables();
+        console.log(`Database setup check result: ${setupCheckPassed}`);
+        setDbStatus({ setupOk: setupCheckPassed, categoriesOk: null });
+
+        if (!setupCheckPassed) {
+             // This indicates a fundamental issue like missing tables or inability to seed.
+             // It's now handled more granularly by errors in getExpenses/getCategories.
+             console.warn("Database setup check failed. Data fetching might fail or tables may be missing. Check README.md.");
+             // Continue fetching, but expect potential errors below.
         }
 
-        // 2. Fetch Data (even if table creation had issues, attempt to fetch)
+        // 2. Fetch Data (even if setup check had warnings, attempt to fetch)
+        console.log("Fetching expenses and categories...");
         const [allExpensesData, filteredExpensesData, categoriesData] = await Promise.all([
           getExpenses(),
           getExpenses({ dateFrom, dateTo, categoryId }),
           getCategories(),
         ]);
 
+        console.log("Data fetched successfully.");
         setAllExpenses(allExpensesData);
         setFilteredExpenses(filteredExpensesData);
         setCategories(categoriesData);
 
-        // Update DB status for categories
-         if (categoriesData === false) { // Check for explicit false which indicates DB error in getCategories
-           setDbStatus((prevStatus) => ({ ...prevStatus, getCategories: false }));
-           setError("Database error fetching categories."); // Set specific error
-         } else if (categoriesData.length === 0 && tableCreationSuccess) { // Distinguish between empty and error
-            setDbStatus((prevStatus) => ({ ...prevStatus, getCategories: true })); // Use 'true' to indicate "table exists but is empty"
-            console.warn("Categories table is empty. Consider seeding initial data.");
-         } else {
-           setDbStatus((prevStatus) => ({ ...prevStatus, getCategories: categoriesData }));
+         // Update DB status for categories based on fetch result
+         setDbStatus((prev) => ({ ...prev, categoriesOk: true }));
+         if (categoriesData.length === 0) {
+              console.warn("Categories table is empty. Seed data might not have run or was cleared.");
+              // Display info message below if needed
          }
 
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error during initial data load:", err);
-        const message = err instanceof Error ? err.message : "An unknown error occurred during data loading.";
-        setError(message);
-         // Update dbStatus to reflect errors
-        setDbStatus(prev => ({
-            tableCreated: prev?.tableCreated ?? null, // Keep table creation status if available
-            getCategories: false // Indicate category fetch failed
-        }));
+        const message = err?.message ?? "An unknown error occurred during data loading.";
+        setError(message); // Set the specific error message
+
+         // Update dbStatus based on the type of error
+         const isSetupError = message.includes("table could not be found") || message.includes("migrations have been applied");
+         setDbStatus(prev => ({
+             setupOk: isSetupError ? false : (prev?.setupOk ?? null), // Mark setup as failed if table not found
+             categoriesOk: message.includes("categories") ? false : (prev?.categoriesOk ?? null) // Mark categories as failed if specific error
+         }));
+
       } finally {
         setIsLoading(false);
+        console.log("Finished initial data load sequence.");
       }
     };
 
@@ -105,6 +109,12 @@ function HomePageContent() {
     );
   }
 
+  // Determine if there's a critical setup error to show
+  const showSetupError = dbStatus?.setupOk === false && error?.includes("table could not be found");
+  const showPermissionError = error?.includes("permission denied") || error?.includes("RLS policies");
+  const showAuthError = error?.includes("Authentication error");
+  const showNetworkError = error?.includes("Network error");
+
   return (
     <div className="container mx-auto px-4 md:px-6 flex flex-col gap-4 md:gap-6">
       {/* Header Section */}
@@ -115,26 +125,44 @@ function HomePageContent() {
         <DesktopActions />
       </div>
 
-       {/* DB Status Messages - More specific */}
-      {dbStatus?.tableCreated === false && !error?.includes("Database setup failed") && (
-            <div className="text-yellow-600 text-sm p-2 bg-yellow-50 border border-yellow-200 rounded-md">Warning: Could not automatically verify/create database tables. Functionality might be limited. Check console & README.</div>
-      )}
-       {dbStatus?.getCategories === false && !error?.includes("categories") && (
-           <div className="text-red-600 text-sm p-2 bg-red-50 border border-red-200 rounded-md">Error: Could not load categories from the database. Please check connection and RLS policies.</div>
+       {/* Specific Error Messages */}
+       {showSetupError && (
+            <div className="text-red-600 text-sm p-2 bg-red-50 border border-red-200 rounded-md">
+                <strong>Database Setup Error:</strong> {error} Ensure you have run the database migrations as per the README.
+            </div>
        )}
-       {dbStatus?.getCategories === true && ( // 'true' indicates empty table
-           <div className="text-blue-600 text-sm p-2 bg-blue-50 border border-blue-200 rounded-md">Info: No categories found. Add some via the 'Add Expense' form or settings (if available).</div>
+       {showPermissionError && !showSetupError && (
+           <div className="text-red-600 text-sm p-2 bg-red-50 border border-red-200 rounded-md">
+               <strong>Permission Error:</strong> {error} Please check your Supabase Row Level Security (RLS) policies.
+           </div>
        )}
-       {/* General Error Display */}
-        {error && (
+        {showAuthError && !showSetupError && !showPermissionError && (
+             <div className="text-red-600 text-sm p-2 bg-red-50 border border-red-200 rounded-md">
+                 <strong>Authentication Error:</strong> {error} Check your Supabase URL and Anon Key in the .env file.
+             </div>
+        )}
+       {showNetworkError && !showSetupError && !showPermissionError && !showAuthError && (
+            <div className="text-red-600 text-sm p-2 bg-red-50 border border-red-200 rounded-md">
+                <strong>Network Error:</strong> {error} Could not connect to the database.
+            </div>
+       )}
+       {/* General Error Display (if not covered above) */}
+        {error && !showSetupError && !showPermissionError && !showAuthError && !showNetworkError && (
              <div className="text-red-600 text-sm p-2 bg-red-50 border border-red-200 rounded-md">
                 <strong>Error:</strong> {error}
             </div>
         )}
 
+        {/* Info message if categories are OK but empty */}
+         {dbStatus?.categoriesOk && categories.length === 0 && !error && (
+             <div className="text-blue-600 text-sm p-2 bg-blue-50 border border-blue-200 rounded-md">
+                 Info: No categories found. Initial categories might need seeding (check console/README) or add some manually.
+             </div>
+         )}
+
       {/* Today (Compact) Summary Card */}
       <Suspense fallback={<Skeleton className="h-24 w-full rounded-xl" />}>
-        <ExpenseSummaryCard expenses={allExpenses} />
+        <ExpenseSummaryCard expenses={allExpenses ?? []} />
       </Suspense>
 
       {/* Filters - Pass potentially empty categories array */}
@@ -198,4 +226,5 @@ function ExpenseListSkeleton() {
     </div>
   );
 }
+
 

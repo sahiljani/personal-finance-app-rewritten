@@ -1,4 +1,3 @@
-
 "use server";
 
 import { type Expense, type Category, type ExtractedReceiptItem } from "@/lib/types";
@@ -34,6 +33,9 @@ function mapExpenseFromDb(dbExpense: any): Expense {
   // Basic validation to ensure dbExpense is an object and has necessary fields
   if (typeof dbExpense !== 'object' || dbExpense === null || !dbExpense.id || !dbExpense.date) {
      console.error("Invalid data received in mapExpenseFromDb:", dbExpense);
+     // In a production app, you might want to handle this more gracefully,
+     // maybe filter out invalid items or return a default structure.
+     // For now, throwing an error highlights the data integrity issue.
      throw new Error("Invalid database expense data received.");
   }
   return {
@@ -74,8 +76,6 @@ export async function getExpenses(
   }
   if (filters?.dateTo) {
     // Adjust end date to be inclusive (end of the day) or exclusive (start of next day)
-    // Supabase date filtering is usually inclusive on both ends by default
-    // For consistency with previous logic, let's query up to the *start* of the next day
     const endDate = new Date(filters.dateTo);
     endDate.setDate(endDate.getDate() + 1);
     query = query.lt('date', endDate.toISOString().split('T')[0]); // Use 'YYYY-MM-DD' format
@@ -380,7 +380,6 @@ export async function getCategories(): Promise<Category[]> {
         const errorDetails = error?.details ?? 'N/A';
         const errorHint = error?.hint ?? 'N/A';
         console.error(`Error fetching categories (Message): ${errorMessage}, (Code): ${errorCode}, (Details): ${errorDetails}, (Hint): ${errorHint}`);
-
 
         // For other errors, construct a user-friendly message and throw
         let userMessage = "Could not fetch categories.";
@@ -712,93 +711,70 @@ export async function suggestCategory(description: string): Promise<string | nul
   }
 }
 
-// Helper function to check/create tables (example, adjust as needed)
-// This is NOT a robust migration tool. Use Supabase CLI for proper migrations.
+// --- Database Initialization & Seeding ---
+
+/**
+ * Checks if the required database tables exist and attempts to seed initial categories if the table is empty.
+ * This is NOT a full migration solution. Use Supabase CLI for proper migrations (`supabase db push`).
+ * It returns true if checks pass or seeding is successful, false otherwise.
+ */
 export async function createRequiredTables(): Promise<boolean> {
     const supabase = createClient();
 
-    // Check/Create Categories Table
-    const createCategoriesQuery = `
-    CREATE TABLE IF NOT EXISTS public.categories (
-        id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-        created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-        name text NOT NULL UNIQUE,
-        icon text
-    );
-    COMMENT ON TABLE public.categories IS 'Stores expense categories defined by users.';
-    ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
-    -- Add Basic RLS Policies (adjust if needed)
-    CREATE POLICY "Allow public read access on categories" ON public.categories FOR SELECT USING (true);
-    CREATE POLICY "Allow public modification access on categories" ON public.categories FOR ALL USING (true);
-    `;
-    const { error: catError } = await supabase.rpc('execute_sql', { sql: createCategoriesQuery });
-    if (catError) {
-        console.error("Error ensuring categories table exists:", catError);
-        if (catError.message.includes('permission denied')) {
-            console.error("Hint: The database user might lack permission to create tables. Ensure the user has necessary privileges or create tables manually via Supabase dashboard/CLI.");
+    try {
+        // Check Categories Table Existence
+        const { error: catCheckError } = await supabase
+            .from('categories')
+            .select('id', { count: 'exact', head: true }) // Efficiently check if table exists and is queryable
+             .limit(1); // Only need to know if it exists
+
+        if (catCheckError) {
+            if (catCheckError.code === '42P01') { // Table doesn't exist
+                console.error("Database Error: 'categories' table not found. Please run migrations (see README.md).");
+                // Consider trying to create it here ONLY if absolutely necessary and with proper permissions
+                // return await attemptCreateTableAndSeed(supabase); // Example: Separate function for creation logic
+                return false; // Indicate setup failure
+            } else {
+                console.error("Error checking 'categories' table:", catCheckError);
+                 throw new Error(`Could not verify 'categories' table. ${catCheckError.message}`);
+            }
+        } else {
+            console.log("'categories' table exists.");
+            // If table exists, attempt seeding if it's empty
+            await seedInitialCategories(supabase);
         }
+
+        // Check Expenses Table Existence
+        const { error: expCheckError } = await supabase
+            .from('expenses')
+            .select('id', { count: 'exact', head: true })
+            .limit(1);
+
+        if (expCheckError) {
+             if (expCheckError.code === '42P01') { // Table doesn't exist
+                console.error("Database Error: 'expenses' table not found. Please run migrations (see README.md).");
+                 // Consider trying to create it here ONLY if absolutely necessary and with proper permissions
+                 // return await attemptCreateTableAndSeed(supabase); // Example
+                 return false; // Indicate setup failure
+             } else {
+                 console.error("Error checking 'expenses' table:", expCheckError);
+                 throw new Error(`Could not verify 'expenses' table. ${expCheckError.message}`);
+             }
+        } else {
+             console.log("'expenses' table exists.");
+        }
+
+        console.log("Database table check completed successfully.");
+        return true; // Tables exist
+
+    } catch (error) {
+        console.error("Error during database table check/setup:", error);
+        // Provide a generic failure message, details logged above
         return false;
-    } else {
-         console.log("Checked/Created 'categories' table successfully.");
-         // Seed initial categories if table was newly created or empty
-          await seedInitialCategories(supabase);
     }
-
-
-    // Check/Create Expenses Table
-    const createExpensesQuery = `
-    CREATE TABLE IF NOT EXISTS public.expenses (
-        id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-        created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-        amount numeric NOT NULL CHECK (amount > 0),
-        description text NOT NULL,
-        category_id uuid REFERENCES public.categories(id) ON DELETE RESTRICT, -- Reference categories table
-        date timestamp with time zone NOT NULL,
-        receipt_url text
-    );
-    COMMENT ON TABLE public.expenses IS 'Stores individual expense records.';
-    -- Add Indexes
-    CREATE INDEX IF NOT EXISTS idx_expenses_date ON public.expenses(date);
-    CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON public.expenses(category_id);
-    -- Enable RLS
-    ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
-    -- Add Basic RLS Policies (adjust if needed)
-    CREATE POLICY "Allow public read access on expenses" ON public.expenses FOR SELECT USING (true);
-    CREATE POLICY "Allow public modification access on expenses" ON public.expenses FOR ALL USING (true);
-    `;
-     const { error: expError } = await supabase.rpc('execute_sql', { sql: createExpensesQuery });
-    if (expError) {
-        console.error("Error ensuring expenses table exists:", expError);
-         if (expError.message.includes('permission denied')) {
-             console.error("Hint: The database user might lack permission to create tables. Ensure the user has necessary privileges or create tables manually via Supabase dashboard/CLI.");
-         } else if (expError.message.includes('relation "categories" does not exist')) {
-             console.error("Hint: The 'expenses' table depends on 'categories'. Ensure 'categories' table is created first.");
-         }
-        return false;
-    } else {
-         console.log("Checked/Created 'expenses' table successfully.");
-    }
-
-    // Grant necessary permissions if using RLS
-     const grantUsageQuery = `GRANT USAGE ON SCHEMA public TO anon, authenticated;`;
-     const grantSelectCatQuery = `GRANT SELECT ON TABLE public.categories TO anon, authenticated;`;
-     const grantModCatQuery = `GRANT INSERT, UPDATE, DELETE ON TABLE public.categories TO anon, authenticated;`; // Adjust roles as needed
-     const grantSelectExpQuery = `GRANT SELECT ON TABLE public.expenses TO anon, authenticated;`;
-     const grantModExpQuery = `GRANT INSERT, UPDATE, DELETE ON TABLE public.expenses TO anon, authenticated;`; // Adjust roles as needed
-
-     await supabase.rpc('execute_sql', { sql: grantUsageQuery });
-     await supabase.rpc('execute_sql', { sql: grantSelectCatQuery });
-     await supabase.rpc('execute_sql', { sql: grantModCatQuery });
-     await supabase.rpc('execute_sql', { sql: grantSelectExpQuery });
-     await supabase.rpc('execute_sql', { sql: grantModExpQuery });
-     console.log("Applied basic grants for anon/authenticated roles.");
-
-
-    console.log("Database table check/creation process completed.");
-    return true; // Indicate success
 }
 
-// Helper to seed initial categories
+// Helper to seed initial categories ONLY if the table is empty
 async function seedInitialCategories(supabase: any) {
     const initialCategories = [
         { id: 'outside-food', name: 'Outside Food', icon: 'Utensils' },
@@ -817,50 +793,60 @@ async function seedInitialCategories(supabase: any) {
     ];
 
     try {
-         const { count } = await supabase.from('categories').select('id', { count: 'exact', head: true });
+        // Check if the table is empty before attempting to seed
+         const { count, error: countError } = await supabase
+             .from('categories')
+             .select('id', { count: 'exact', head: true });
+
+         if (countError) {
+             console.error("Error checking category count before seeding:", countError);
+             // Don't throw here, allow the app to continue if possible, but log the issue.
+             // Seeding will likely fail if the table is unreadable.
+             return;
+         }
 
          if (count === 0) {
-             console.log("Seeding initial categories...");
-             const { error: insertError } = await supabase.from('categories').insert(initialCategories);
+             console.log("Seeding initial categories as the table is empty...");
+             // Use upsert with ignoreDuplicates: false to insert only if IDs don't exist (safer)
+             // Or simple insert if confident IDs are unique or handled by DB defaults
+             const { error: insertError } = await supabase
+                 .from('categories')
+                 .insert(initialCategories);
+                 // .upsert(initialCategories, { onConflict: 'id', ignoreDuplicates: false }); // Use upsert if IDs might clash
+
              if (insertError) {
                   console.error("Error seeding categories:", insertError);
                   if (insertError.message.includes('permission denied')) {
                        console.error("Hint: Check RLS insert policy on 'categories' table.");
+                  } else if (insertError.code === '23505') { // Unique violation (e.g., if ID is not default UUID)
+                       console.warn("Warning seeding categories: Some categories might already exist.");
                   }
              } else {
                  console.log("Initial categories seeded successfully.");
+                 revalidatePath("/"); // Revalidate relevant paths after seeding
+                 revalidatePath("/settings");
              }
          } else {
              console.log("Categories table already contains data, skipping seed.");
          }
     } catch (error) {
-         console.error("Error checking/seeding categories:", error);
-          if (error instanceof Error && error.message.includes('relation "categories" does not exist')) {
-               console.error("Cannot seed categories because the table does not exist.");
-           } else if (error instanceof Error && error.message.includes('permission denied')) {
-                console.error("Permission denied checking/seeding categories. Check RLS policies.");
-           }
+        // Catch potential errors during the check/seed process
+        console.error("Unexpected error during category seeding process:", error);
+        // Log specific known errors if possible
+        if (error instanceof Error && error.message.includes('permission denied')) {
+            console.error("Permission denied checking/seeding categories. Check RLS policies.");
+        }
+        // Do not throw here to avoid blocking app load unnecessarily, log instead.
     }
 }
 
-// Add a function to execute raw SQL (Needed for CREATE TABLE etc.)
-// Note: Requires enabling the 'sql' extension in Supabase & possibly admin privileges.
-// Alternatively, use the Supabase CLI or Dashboard SQL Editor for migrations.
-// This function is a workaround and might have security implications if sql string is dynamic.
-// Prefer using Supabase CLI migrations (`supabase db push`).
-async function executeSql(sql: string): Promise<{ data: any; error: any }> {
-    const supabase = createClient();
-    // This assumes you have a function `execute_sql` set up in Supabase
-    // See: https://supabase.com/docs/guides/database/functions#running-sql-statements
-    // Or use a more direct method if available/allowed by your Supabase client version & setup.
-    // WARNING: Directly executing arbitrary SQL from client-side code is a major security risk.
-    // This function should ONLY be used with static, predefined SQL strings in server actions.
-    return await supabase.rpc('execute_sql', { sql }); // Assuming 'execute_sql' function exists
-}
-
-// You might call createRequiredTables on app startup or a specific setup page.
-// Example (call this cautiously, e.g., in a setup route or admin panel):
-// createRequiredTables().then(success => {
-//   if (success) console.log("Database setup check successful.");
-//   else console.error("Database setup check failed.");
-// });
+// IMPORTANT: Creating tables via RPC/SQL function is generally discouraged for migrations.
+// Use Supabase CLI (`supabase db push`) or the dashboard SQL editor with the migration file.
+// The `executeSql` function below is a placeholder and likely requires specific DB setup.
+// async function executeSql(sql: string): Promise<{ data: any; error: any }> {
+//     const supabase = createClient();
+//     // This assumes you have a function `execute_sql` set up in Supabase
+//     // See: https://supabase.com/docs/guides/database/functions#running-sql-statements
+//     // WARNING: High security risk if `sql` is dynamic. Use ONLY with static strings.
+//     return await supabase.rpc('execute_sql', { sql });
+// }
