@@ -16,7 +16,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
+  // AlertDialogTrigger, // Removed as it's not needed here
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { deleteExpense } from "@/lib/actions";
@@ -179,11 +179,10 @@ export function ExpenseList({ initialExpenses, categories }: ExpenseListProps) {
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => handleEditClick(expense)} aria-label="Edit Expense">
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteClick(expense)} aria-label="Delete Expense">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
+                        {/* Removed AlertDialogTrigger wrapper here */}
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive/90" onClick={() => handleDeleteClick(expense)} aria-label="Delete Expense">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                   </li>
                 );
