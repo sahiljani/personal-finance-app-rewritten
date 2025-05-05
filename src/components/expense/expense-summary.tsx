@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { Expense, Category } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"; // Added CardFooter
 import {
   ChartContainer,
   ChartTooltip,
@@ -11,7 +11,7 @@ import {
   ChartLegend,
   ChartLegendContent
 } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts"; // Removed unused Tooltip, Legend
 import { getCategories } from "@/lib/actions"; // Need categories for labels
 import { Loader2 } from "lucide-react"; // Import Loader2
 
