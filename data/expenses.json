@@ -166,5 +166,33 @@
     "categoryId": "shopping",
     "date": "2025-05-05T18:04:16.107Z",
     "id": "1746468257365-25guxim-4"
+  },
+  {
+    "amount": 1.16,
+    "description": "BANANAS 2 LB",
+    "categoryId": "grocery",
+    "date": "2025-05-05T18:16:35.906Z",
+    "id": "1746468997181-qovky65-1"
+  },
+  {
+    "amount": 2.49,
+    "description": "BREAD WHOLE WHEAT",
+    "categoryId": "grocery",
+    "date": "2025-05-05T18:16:35.906Z",
+    "id": "1746468997181-lrmanyz-2"
+  },
+  {
+    "amount": 2.19,
+    "description": "EGGS 12CT LARGE",
+    "categoryId": "grocery",
+    "date": "2025-05-05T18:16:35.906Z",
+    "id": "1746468997181-guibm4d-3"
+  },
+  {
+    "amount": 3.99,
+    "description": "TOOTHPASTE COLGATE",
+    "categoryId": "shopping",
+    "date": "2025-05-05T18:16:35.906Z",
+    "id": "1746468997182-esqhtgx-4"
   }
 ]

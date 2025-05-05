@@ -1,6 +1,8 @@
+
 import { getExpenses, getCategories } from "@/lib/actions";
 import { ExpenseList } from "@/components/expense/expense-list";
 import { ExpenseFilters } from "@/components/expense/expense-filters";
+import { ExpenseSummaryCard } from "@/components/expense/expense-summary-card"; // Import the new card
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DesktopActions } from "@/components/navigation/desktop-actions"; // Import DesktopActions
@@ -21,8 +23,10 @@ export default async function HomePage({
   const categoryId = searchParams?.categoryId;
 
   // Fetch data in parallel
-  const [expenses, categories] = await Promise.all([
-    getExpenses({ dateFrom, dateTo, categoryId }),
+  // Fetch *all* expenses initially for the summary card, filtering happens client-side there
+  const [allExpenses, filteredExpenses, categories] = await Promise.all([
+    getExpenses(), // Fetch all expenses for the summary card
+    getExpenses({ dateFrom, dateTo, categoryId }), // Fetch filtered expenses for the list
     getCategories(),
   ]);
 
@@ -32,10 +36,15 @@ export default async function HomePage({
        {/* Header Section - Minimal Style */}
        <div className="flex justify-between items-center pt-2"> {/* Added padding-top */}
          {/* Title matches reference style */}
-        <h1 className="text-xl md:text-2xl font-semibold text-foreground">Expenses</h1>
+        <h1 className="text-xl md:text-2xl font-semibold text-foreground">Overview</h1>
         {/* Desktop Action Buttons (Add/Upload) - Hidden on mobile */}
         <DesktopActions />
       </div>
+
+       {/* Today (Compact) Summary Card */}
+       <Suspense fallback={<Skeleton className="h-24 w-full rounded-xl" />}>
+         <ExpenseSummaryCard expenses={allExpenses} />
+       </Suspense>
 
       {/* Filters - Keep collapsible */}
       <ExpenseFilters categories={categories} />
@@ -48,9 +57,9 @@ export default async function HomePage({
       </div>
 
 
-      {/* Expense List */}
+      {/* Expense List - Uses filtered expenses */}
       <Suspense fallback={<ExpenseListSkeleton />}>
-        <ExpenseList initialExpenses={expenses} categories={categories} />
+        <ExpenseList initialExpenses={filteredExpenses} categories={categories} />
       </Suspense>
     </div>
   );

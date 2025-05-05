@@ -1,9 +1,11 @@
+
 import { getExpenses, getCategories } from "@/lib/actions";
 import { ExpenseSummary } from "@/components/expense/expense-summary";
 import { ExpenseFilters } from "@/components/expense/expense-filters";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DesktopActions } from "@/components/navigation/desktop-actions"; // Import DesktopActions
+// Removed ExpenseSummaryCard import, keeping ExpenseSummary for the detailed charts
 
 export const dynamic = 'force-dynamic'; // Ensure data is fetched fresh on each request
 
@@ -22,8 +24,8 @@ export default async function ReportsPage({
 
   // Fetch data needed for reports
   // Fetch categories for filters
-  const [expenses, categories] = await Promise.all([
-    getExpenses({ dateFrom, dateTo, categoryId }), // Fetch expenses based on filters
+  const [expensesForReport, categories] = await Promise.all([
+    getExpenses({ dateFrom, dateTo, categoryId }), // Fetch expenses based on filters for the detailed charts
     getCategories(), // Fetch categories for the filter component
   ]);
 
@@ -47,9 +49,9 @@ export default async function ReportsPage({
            {/* <span className="text-sm text-muted-foreground">For selected period</span> */}
       </div>
 
-      {/* Expense Summary / Charts */}
+      {/* Expense Summary / Charts - Uses filtered expenses */}
       <Suspense fallback={<ExpenseSummarySkeleton />}>
-        <ExpenseSummary expenses={expenses} />
+        <ExpenseSummary expenses={expensesForReport} />
       </Suspense>
 
       {/* Add more report components or charts here as needed */}
