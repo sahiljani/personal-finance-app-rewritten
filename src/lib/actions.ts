@@ -4,13 +4,9 @@
 import { type Expense, type Category, type ExtractedReceiptItem } from "@/lib/types";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/client"; // Import Supabase server client
+import { createClient } from "@/lib/supabase/client"; // Import Supabase server client factory function
 import { extractReceiptData } from "@/ai/flows/extract-receipt-data";
 import { suggestCategoryFlow } from "@/ai/flows/suggest-category-flow";
-
-// --- Supabase Client ---
-// We get the client instance within each action to ensure it's properly scoped
-// const supabase = createClient(); // Don't create client globally in Server Actions file
 
 // --- Data Schemas (using Supabase conventions) ---
 
@@ -59,7 +55,7 @@ function mapCategoryFromDb(dbCategory: any): Category {
 export async function getExpenses(
   filters?: { dateFrom?: string; dateTo?: string; categoryId?: string }
 ): Promise<Expense[]> {
-  const supabase = createClient();
+  const supabase = createClient(); // Create client inside the action
   let query = supabase.from("expenses").select("*");
 
   // Apply filters
@@ -92,11 +88,12 @@ export async function getExpenses(
 }
 
 export async function addExpense(expenseData: Omit<Expense, "id" | "receiptUrl"> & { receiptUrl?: string | null }): Promise<Expense> {
-   const supabase = createClient();
+   const supabase = createClient(); // Create client inside the action
    // Validate incoming data against the frontend structure first
    const validatedFrontendData = ExpenseSchema.omit({ id: true, created_at: true, category_id: true, receipt_url: true }).extend({
        categoryId: z.string().min(1, "Category is required"),
        receiptUrl: z.string().optional().nullable(),
+       date: z.string().datetime("Invalid date format"), // Ensure date is validated here
    }).parse(expenseData);
 
    // Prepare data for Supabase insertion (map frontend fields to DB fields)
@@ -128,12 +125,13 @@ export async function addExpense(expenseData: Omit<Expense, "id" | "receiptUrl">
 }
 
 export async function addExpensesBatch(expenseDataArray: Omit<Expense, "id" | "receiptUrl">[]): Promise<Expense[]> {
-    const supabase = createClient();
+    const supabase = createClient(); // Create client inside the action
     const expensesToInsert = expenseDataArray.map(expenseData => {
          // Validate each item individually (optional, but good practice)
          const validatedFrontendData = ExpenseSchema.omit({ id: true, created_at: true, category_id: true, receipt_url: true }).extend({
              categoryId: z.string().min(1, "Category is required"),
              receiptUrl: z.string().optional().nullable(),
+             date: z.string().datetime("Invalid date format"), // Ensure date is validated here
          }).parse(expenseData);
 
          return {
@@ -163,11 +161,12 @@ export async function addExpensesBatch(expenseDataArray: Omit<Expense, "id" | "r
 
 
 export async function updateExpense(id: string, updates: Partial<Omit<Expense, "id" | "receiptUrl">> & { receiptUrl?: string | null }): Promise<Expense> {
-    const supabase = createClient();
+    const supabase = createClient(); // Create client inside the action
     // Validate the partial update data
     const partialFrontendSchema = ExpenseSchema.partial().omit({ id: true, created_at: true, category_id: true, receipt_url: true }).extend({
         categoryId: z.string().optional(),
         receiptUrl: z.string().optional().nullable(),
+        date: z.string().datetime("Invalid date format").optional(), // Allow optional date update
     });
     const validatedUpdates = partialFrontendSchema.parse(updates);
 
@@ -220,7 +219,7 @@ export async function updateExpense(id: string, updates: Partial<Omit<Expense, "
 }
 
 export async function deleteExpense(id: string): Promise<void> {
-    const supabase = createClient();
+    const supabase = createClient(); // Create client inside the action
     const { error } = await supabase
         .from("expenses")
         .delete()
@@ -241,7 +240,7 @@ export async function deleteExpense(id: string): Promise<void> {
 // --- Category Actions ---
 
 export async function getCategories(): Promise<Category[]> {
-    const supabase = createClient();
+    const supabase = createClient(); // Create client inside the action
     const { data, error } = await supabase
         .from("categories")
         .select("*")
@@ -258,7 +257,7 @@ export async function getCategories(): Promise<Category[]> {
 // Note: Adding categories might require specific DB setup (e.g., RLS policies)
 // The ID is usually handled by Supabase (UUID)
 export async function addCategory(categoryData: Omit<Category, "id">): Promise<Category> {
-    const supabase = createClient();
+    const supabase = createClient(); // Create client inside the action
     const validatedData = CategorySchema.omit({ id: true, created_at: true }).parse(categoryData);
 
      // Optional: Check for duplicate names server-side before inserting
@@ -296,7 +295,7 @@ export async function addCategory(categoryData: Omit<Category, "id">): Promise<C
 }
 
 export async function updateCategory(id: string, updates: Partial<Omit<Category, "id">>): Promise<Category> {
-    const supabase = createClient();
+    const supabase = createClient(); // Create client inside the action
     const partialSchema = CategorySchema.partial().omit({ id: true, created_at: true });
     const validatedUpdates = partialSchema.parse(updates);
 
@@ -344,7 +343,7 @@ export async function updateCategory(id: string, updates: Partial<Omit<Category,
 }
 
 export async function deleteCategory(id: string): Promise<void> {
-    const supabase = createClient();
+    const supabase = createClient(); // Create client inside the action
 
     // Check if any expenses use this category
      const { data: expenses, error: expensesError } = await supabase
@@ -393,7 +392,12 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
         // Fetch current categories to ensure AI suggestions are validated against available ones
         const categories = await getCategories();
         const validCategoryIds = categories.map(c => c.id);
-        const defaultCategoryId = categories.find(c => c.id === 'other')?.id || categories[0]?.id || ''; // Fallback
+        // Ensure a valid default exists, even if 'other' is missing
+        const defaultCategoryId = categories.find(c => c.id === 'other')?.id || categories[0]?.id;
+        if (!defaultCategoryId) {
+             throw new Error("No categories available to assign as default."); // Critical error if no categories exist
+        }
+
 
         // Call the AI flow which returns items with categoryId suggestions
         const result = await extractReceiptData({ fileDataUri });
