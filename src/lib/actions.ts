@@ -1,3 +1,4 @@
+
 "use server";
 
 import { type Expense, type Category, type ExtractedReceiptItem } from "@/lib/types";
@@ -30,17 +31,27 @@ const ExpenseSchema = z.object({
 
 // Type mapping to frontend types (adjust if needed)
 function mapExpenseFromDb(dbExpense: any): Expense {
+  // Basic validation to ensure dbExpense is an object and has necessary fields
+  if (typeof dbExpense !== 'object' || dbExpense === null || !dbExpense.id || !dbExpense.date) {
+     console.error("Invalid data received in mapExpenseFromDb:", dbExpense);
+     throw new Error("Invalid database expense data received.");
+  }
   return {
     id: dbExpense.id,
-    amount: dbExpense.amount,
-    description: dbExpense.description,
-    categoryId: dbExpense.category_id, // Map DB column to frontend property
-    date: dbExpense.date,
+    amount: Number(dbExpense.amount) || 0, // Ensure amount is number
+    description: dbExpense.description ?? '', // Ensure description is string
+    categoryId: dbExpense.category_id ?? '', // Ensure categoryId is string
+    date: dbExpense.date, // Assume date is correct format from DB
     receiptUrl: dbExpense.receipt_url,
   };
 }
 
 function mapCategoryFromDb(dbCategory: any): Category {
+   // Basic validation
+   if (typeof dbCategory !== 'object' || dbCategory === null || !dbCategory.id || !dbCategory.name) {
+      console.error("Invalid data received in mapCategoryFromDb:", dbCategory);
+      throw new Error("Invalid database category data received.");
+   }
   return {
     id: dbCategory.id,
     name: dbCategory.name,
@@ -79,12 +90,35 @@ export async function getExpenses(
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching expenses:", error);
+    // Log the detailed error object from Supabase
+    console.error("Error fetching expenses (Raw Object):", error);
+    console.error(`Error fetching expenses (Message): ${error.message}, (Code): ${error.code}, (Details): ${error.details}, (Hint): ${error.hint}`);
+
     // Provide more specific error context if possible
-    throw new Error(`Could not fetch expenses. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+    let userMessage = "Could not fetch expenses.";
+    if (error.code === '42P01') { // PostgreSQL error code for 'undefined_table'
+      userMessage = "Database error: The 'expenses' table could not be found. Please check the database schema and ensure the table exists and migrations are applied.";
+    } else if (error.message.includes('permission denied')) { // Check for RLS issues
+      userMessage = "Permission denied fetching expenses. Please check Row Level Security (RLS) policies on the 'expenses' table in Supabase to allow read access.";
+    } else if (error.message.includes('NetworkError')) {
+        userMessage = "Network error: Could not connect to the database.";
+    } else if (error.message.includes('Invalid API key')) {
+        userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+    } else {
+        // Fallback using Supabase error details if available
+        userMessage += ` ${error.message || '(Check Supabase connection/permissions)'}${error.details ? ` (${error.details})` : ''}`;
+    }
+    console.error("Throwing user-facing error:", userMessage); // Log the final error message being thrown
+    throw new Error(userMessage);
   }
 
-  return data?.map(mapExpenseFromDb) ?? [];
+  try {
+      // Add explicit validation/mapping step
+      return data?.map(mapExpenseFromDb) ?? [];
+  } catch (mappingError) {
+      console.error("Error mapping database expenses to frontend type:", mappingError);
+      throw new Error("Failed to process expense data from database.");
+  }
 }
 
 export async function addExpense(expenseData: Omit<Expense, "id" | "receiptUrl"> & { receiptUrl?: string | null }): Promise<Expense> {
@@ -114,14 +148,31 @@ export async function addExpense(expenseData: Omit<Expense, "id" | "receiptUrl">
 
     if (error) {
         console.error("Error adding expense:", error);
-        throw new Error(`Could not add expense. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+        let userMessage = "Could not add expense.";
+        if (error.code === '23503') { // Foreign key violation
+             userMessage = "Could not add expense: Invalid category selected.";
+        } else if (error.code === '42P01') {
+            userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
+        } else if (error.message.includes('permission denied')) {
+             userMessage = "Permission denied adding expense. Check RLS policies on 'expenses'.";
+        } else if (error.message.includes('Invalid API key')) {
+           userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else {
+            userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
+        }
+        throw new Error(userMessage);
     }
 
     revalidatePath("/");
     revalidatePath("/reports");
 
-    // Map DB result back to frontend type
-    return mapExpenseFromDb(data);
+     try {
+        // Map DB result back to frontend type
+        return mapExpenseFromDb(data);
+    } catch (mappingError) {
+        console.error("Error mapping added expense from DB:", mappingError);
+        throw new Error("Expense added, but failed to process the returned data.");
+    }
 }
 
 export async function addExpensesBatch(expenseDataArray: Omit<Expense, "id" | "receiptUrl">[]): Promise<Expense[]> {
@@ -150,13 +201,28 @@ export async function addExpensesBatch(expenseDataArray: Omit<Expense, "id" | "r
 
     if (error) {
         console.error("Error adding expenses batch:", error);
-        throw new Error(`Could not add expenses batch. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+         let userMessage = "Could not add expenses batch.";
+         if (error.code === '42P01') {
+             userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
+         } else if (error.message.includes('permission denied')) {
+              userMessage = "Permission denied adding expenses batch. Check RLS policies on 'expenses'.";
+         } else if (error.message.includes('Invalid API key')) {
+            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+         } else {
+             userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
+         }
+        throw new Error(userMessage);
     }
 
     revalidatePath("/");
     revalidatePath("/reports");
 
-    return data?.map(mapExpenseFromDb) ?? [];
+     try {
+        return data?.map(mapExpenseFromDb) ?? [];
+    } catch (mappingError) {
+        console.error("Error mapping batch added expenses from DB:", mappingError);
+        throw new Error("Expenses added, but failed to process the returned data.");
+    }
 }
 
 
@@ -204,10 +270,21 @@ export async function updateExpense(id: string, updates: Partial<Omit<Expense, "
 
     if (error) {
         console.error("Error updating expense:", error);
-        if (error.code === 'PGRST116') { // Resource Not Found
-            throw new Error("Expense not found for update.");
+        let userMessage = "Could not update expense.";
+        if (error.code === 'PGRST116') { // Resource Not Found (PostgREST code)
+            userMessage = "Expense not found for update.";
+        } else if (error.code === '23503') { // Foreign key violation
+            userMessage = "Could not update expense: Invalid category selected.";
+        } else if (error.code === '42P01') {
+             userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
+        } else if (error.message.includes('permission denied')) {
+             userMessage = "Permission denied updating expense. Check RLS policies on 'expenses'.";
+        } else if (error.message.includes('Invalid API key')) {
+             userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else {
+            userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
         }
-        throw new Error(`Could not update expense. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+        throw new Error(userMessage);
     }
      if (!data) {
          throw new Error("Expense not found after update attempt.");
@@ -215,7 +292,12 @@ export async function updateExpense(id: string, updates: Partial<Omit<Expense, "
 
     revalidatePath("/");
     revalidatePath("/reports");
-    return mapExpenseFromDb(data);
+    try {
+        return mapExpenseFromDb(data);
+     } catch (mappingError) {
+         console.error("Error mapping updated expense from DB:", mappingError);
+         throw new Error("Expense updated, but failed to process the returned data.");
+     }
 }
 
 export async function deleteExpense(id: string): Promise<void> {
@@ -227,7 +309,17 @@ export async function deleteExpense(id: string): Promise<void> {
 
     if (error) {
         console.error("Error deleting expense:", error);
-        throw new Error(`Could not delete expense. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+        let userMessage = "Could not delete expense.";
+         if (error.code === '42P01') {
+             userMessage = "Database error: The 'expenses' table could not be found. Check schema/migrations.";
+         } else if (error.message.includes('permission denied')) {
+              userMessage = "Permission denied deleting expense. Check RLS policies on 'expenses'.";
+         } else if (error.message.includes('Invalid API key')) {
+             userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+         } else {
+            userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
+         }
+        throw new Error(userMessage);
     }
     // We can't easily check if a row was actually deleted without another query,
     // but Supabase delete doesn't error if the row doesn't exist with `eq`.
@@ -246,14 +338,35 @@ export async function getCategories(): Promise<Category[]> {
         .select("*")
         .order('name', { ascending: true }); // Optional: order by name
 
-    if (error) {
+     if (error) {
         // Log the detailed error object from Supabase
-        console.error("Error fetching categories:", error);
-        // Throw a more informative error message including details from the Supabase error
-        throw new Error(`Could not fetch categories. ${error.message || '(Check RLS policies)'} ${error.details ? `(${error.details})` : ''}`);
+        console.error("Error fetching categories (Raw Object):", error);
+        console.error(`Error fetching categories (Message): ${error.message}, (Code): ${error.code}, (Details): ${error.details}, (Hint): ${error.hint}`);
+        // Provide more specific error context if possible
+        let userMessage = "Could not fetch categories.";
+        if (error.code === '42P01') { // PostgreSQL error code for 'undefined_table'
+           userMessage = "Database error: The 'categories' table could not be found. Please check the database schema and ensure the table exists and migrations are applied.";
+        } else if (error.message.includes('permission denied')) { // Check for RLS issues
+           userMessage = "Permission denied fetching categories. Please check Row Level Security (RLS) policies on the 'categories' table in Supabase to allow read access.";
+        } else if (error.message.includes('NetworkError')) {
+           userMessage = "Network error: Could not connect to the database.";
+        } else if (error.message.includes('Invalid API key')) {
+            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else {
+            // Fallback using Supabase error details if available
+            userMessage += ` ${error.message || '(Check Supabase connection/permissions)'}${error.details ? ` (${error.details})` : ''}`;
+        }
+        console.error("Throwing user-facing error:", userMessage); // Log the final error message being thrown
+        throw new Error(userMessage);
     }
 
-    return data?.map(mapCategoryFromDb) ?? [];
+     try {
+        // Add explicit validation/mapping step
+        return data?.map(mapCategoryFromDb) ?? [];
+    } catch (mappingError) {
+        console.error("Error mapping database categories to frontend type:", mappingError);
+        throw new Error("Failed to process category data from database.");
+    }
 }
 
 // Note: Adding categories might require specific DB setup (e.g., RLS policies)
@@ -289,11 +402,26 @@ export async function addCategory(categoryData: Omit<Category, "id">): Promise<C
 
     if (error) {
         console.error("Error adding category:", error);
-        throw new Error(`Could not add category. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+        let userMessage = "Could not add category.";
+        if (error.code === '42P01') {
+             userMessage = "Database error: The 'categories' table could not be found. Check schema/migrations.";
+        } else if (error.message.includes('permission denied')) {
+             userMessage = "Permission denied adding category. Check RLS policies on 'categories'.";
+        } else if (error.message.includes('Invalid API key')) {
+            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else {
+             userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
+        }
+        throw new Error(userMessage);
     }
 
     revalidatePath("/");
-    return mapCategoryFromDb(data);
+     try {
+         return mapCategoryFromDb(data);
+     } catch (mappingError) {
+         console.error("Error mapping added category from DB:", mappingError);
+         throw new Error("Category added, but failed to process the returned data.");
+     }
 }
 
 export async function updateCategory(id: string, updates: Partial<Omit<Category, "id">>): Promise<Category> {
@@ -331,40 +459,58 @@ export async function updateCategory(id: string, updates: Partial<Omit<Category,
 
     if (error) {
         console.error("Error updating category:", error);
+        let userMessage = "Could not update category.";
          if (error.code === 'PGRST116') {
-            throw new Error("Category not found for update.");
+            userMessage = "Category not found for update.";
+        } else if (error.code === '42P01') {
+             userMessage = "Database error: The 'categories' table could not be found. Check schema/migrations.";
+        } else if (error.message.includes('permission denied')) {
+             userMessage = "Permission denied updating category. Check RLS policies on 'categories'.";
+        } else if (error.message.includes('Invalid API key')) {
+            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else {
+             userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
         }
-        throw new Error(`Could not update category. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+        throw new Error(userMessage);
     }
      if (!data) {
          throw new Error("Category not found after update attempt.");
      }
 
     revalidatePath("/");
-    return mapCategoryFromDb(data);
+     try {
+         return mapCategoryFromDb(data);
+     } catch (mappingError) {
+         console.error("Error mapping updated category from DB:", mappingError);
+         throw new Error("Category updated, but failed to process the returned data.");
+     }
 }
 
 export async function deleteCategory(id: string): Promise<void> {
     const supabase = createClient(); // Create client inside the action
 
     // Check if any expenses use this category
-     const { data: expenses, error: expensesError } = await supabase
+    // Important: Ensure RLS allows checking expenses table if applicable
+     const { count, error: expensesError } = await supabase
          .from('expenses')
-         .select('id', { count: 'exact', head: true }) // Only need the count
-         .eq('category_id', id);
+         .select('id', { count: 'exact', head: true }) // Use head: true for count only
+         .eq('category_id', id); // Filter by the category being deleted
 
      if (expensesError) {
          console.error("Error checking for expenses linked to category:", expensesError);
+         // Check specifically for missing 'expenses' table
+         if (expensesError.code === '42P01') {
+             throw new Error("Database error: Could not check for linked expenses because the 'expenses' table was not found.");
+         } else if (expensesError.message.includes('permission denied')) {
+             throw new Error("Permission denied checking linked expenses. Check RLS policies on 'expenses'.");
+         }
          throw new Error(`Could not verify if category is in use. ${expensesError.message}`);
      }
 
-     // Use ?.count syntax if available and supported by your Supabase version/types
-     // Otherwise, adjust based on how count is returned. Check Supabase docs if needed.
-     const expenseCount = (expenses as unknown as { count: number } | null)?.count ?? 0; // Adjust type assertion as needed
-
+     const expenseCount = count ?? 0;
 
     if (expenseCount > 0) {
-        throw new Error(`Cannot delete category: It is assigned to ${expenseCount} expense(s).`);
+        throw new Error(`Cannot delete category: It is assigned to ${expenseCount} expense(s). Please reassign them first.`);
     }
 
     // Proceed with deletion if no expenses are linked
@@ -375,7 +521,17 @@ export async function deleteCategory(id: string): Promise<void> {
 
     if (error) {
         console.error("Error deleting category:", error);
-        throw new Error(`Could not delete category. ${error.message || '(Check Supabase RLS/Permissions)'}`);
+        let userMessage = "Could not delete category.";
+        if (error.code === '42P01') {
+            userMessage = "Database error: The 'categories' table could not be found. Check schema/migrations.";
+        } else if (error.message.includes('permission denied')) {
+             userMessage = "Permission denied deleting category. Check RLS policies on 'categories'.";
+        } else if (error.message.includes('Invalid API key')) {
+            userMessage = "Authentication error: Invalid Supabase API key. Check your .env file.";
+        } else {
+            userMessage += ` ${error.message || '(Check Supabase RLS/Permissions)'}`;
+        }
+        throw new Error(userMessage);
     }
 
     revalidatePath("/");
@@ -397,9 +553,10 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
         // Ensure a valid default exists, even if 'other' is missing
         const defaultCategoryId = categories.find(c => c.id === 'other')?.id || categories[0]?.id;
         if (!defaultCategoryId && categories.length > 0) { // Check if categories array is not empty before throwing
-             throw new Error("No default category ('other' or first category) available to assign.");
+             console.error("No default category found for receipt processing.");
+             throw new Error("Configuration error: No default category ('other' or first category) available to assign.");
         } else if (categories.length === 0) {
-             throw new Error("No categories found in the database. Cannot process receipt.");
+             throw new Error("No categories found in the database. Please add categories first before processing receipts.");
         }
 
 
@@ -422,6 +579,10 @@ export async function processReceiptFile(fileDataUri: string): Promise<Extracted
              // Make error message more user-friendly
              if (error.message.includes("No categories found")) {
                  throw new Error("Cannot process receipt: No categories are set up in the application.");
+             }
+             // Pass through more specific errors from getCategories if relevant
+             if (error.message.includes("Database error:") || error.message.includes("Network error:")) {
+                  throw error; // Re-throw the specific database/network error
              }
              throw new Error(`Failed to process receipt: ${error.message}`);
         } else {
@@ -460,6 +621,12 @@ export async function suggestCategory(description: string): Promise<string | nul
     }
   } catch (error) {
     console.error("Error suggesting category with AI:", error);
-    return null; // Return null on error
+     // Avoid propagating raw DB errors to the frontend suggestion mechanism
+     if (error instanceof Error && (error.message.includes("Database error:") || error.message.includes("Network error:"))){
+         console.error("Database/Network error prevented category suggestion.");
+         return null;
+     }
+    return null; // Return null on other errors
   }
 }
+

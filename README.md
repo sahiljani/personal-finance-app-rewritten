@@ -1,3 +1,4 @@
+
 # Firebase Studio (Now using Supabase)
 
 This is a Next.js starter app in Firebase Studio, now configured to use Supabase for its database.
@@ -28,9 +29,29 @@ To get started, take a look at `src/app/page.tsx`.
     # GOOGLE_GENAI_API_KEY=YOUR_GOOGLE_GENAI_API_KEY_HERE
     ```
 
-    **Important:** Replace `YOUR_SUPABASE_URL_HERE` and `YOUR_SUPABASE_ANON_KEY_HERE` with your actual credentials from your Supabase project dashboard.
+    **Important:** Replace `YOUR_SUPABASE_URL_HERE` and `YOUR_SUPABASE_ANON_KEY_HERE` with your actual credentials from your Supabase project dashboard. **Do not use the placeholder keys.**
 
-3.  **Run the development server:**
+3.  **Set up Database Schema:**
+    The application requires specific tables in your Supabase database. You need to create these tables by running the SQL commands found in the `supabase/migrations` directory.
+
+    **Option 1: Using Supabase Dashboard SQL Editor**
+    *   Go to your Supabase project dashboard.
+    *   Navigate to the **SQL Editor** section.
+    *   Click on "**New query**".
+    *   Copy the entire content of the SQL file(s) located in `supabase/migrations/` (start with `0000_init_schema.sql`).
+    *   Paste the SQL content into the editor.
+    *   Click "**Run**".
+    *   Verify that the tables (`categories`, `expenses`) were created successfully in the **Table Editor**.
+
+    **Option 2: Using Supabase CLI (if installed)**
+    *   Ensure you have the [Supabase CLI](https://supabase.com/docs/guides/cli) installed and linked to your project (`supabase login`, `supabase link --project-ref YOUR_PROJECT_ID`).
+    *   From your project's root directory, run:
+        ```bash
+        supabase db push
+        ```
+    *   This command applies any pending migrations found in the `supabase/migrations` folder to your linked Supabase database.
+
+4.  **Run the development server:**
     ```bash
     npm run dev
     ```
@@ -39,23 +60,37 @@ To get started, take a look at `src/app/page.tsx`.
 
 ## Supabase Schema
 
-This application expects the following tables in your Supabase database:
+This application expects the following tables in your Supabase database (created by the migration `supabase/migrations/0000_init_schema.sql`):
 
 *   **`categories`**:
     *   `id` (uuid, primary key, default: `gen_random_uuid()`)
     *   `created_at` (timestamp with time zone, default: `now()`)
-    *   `name` (text, not null)
-    *   `icon` (text, nullable) - Stores Lucide icon name or SVG.
+    *   `name` (text, not null, unique)
+    *   `icon` (text, nullable)
 *   **`expenses`**:
     *   `id` (uuid, primary key, default: `gen_random_uuid()`)
     *   `created_at` (timestamp with time zone, default: `now()`)
-    *   `amount` (numeric, not null)
+    *   `amount` (numeric, not null, check: `amount > 0`)
     *   `description` (text, not null)
-    *   `category_id` (uuid, not null, foreign key to `categories.id`)
+    *   `category_id` (uuid, not null, foreign key to `categories.id` ON DELETE RESTRICT)
     *   `date` (timestamp with time zone, not null)
     *   `receipt_url` (text, nullable)
 
-You might need to enable Row Level Security (RLS) and define policies if you integrate user authentication later.
+**Row Level Security (RLS):**
+The initial migration enables RLS on both tables but does not define policies by default (unless you uncomment the example policies). This means **no data can be accessed** until you define appropriate policies.
+
+*   **For initial testing without authentication:** You can create simple `SELECT` policies allowing all access in the Supabase dashboard under Authentication > Policies. Example:
+    ```sql
+    -- In Supabase SQL Editor
+    CREATE POLICY "Allow public read access on categories" ON public.categories FOR SELECT USING (true);
+    CREATE POLICY "Allow public read access on expenses" ON public.expenses FOR SELECT USING (true);
+    -- You'll also need INSERT/UPDATE/DELETE policies for full functionality
+    CREATE POLICY "Allow public insert access" ON public.expenses FOR INSERT WITH CHECK (true);
+    CREATE POLICY "Allow public update access" ON public.expenses FOR UPDATE USING (true);
+    CREATE POLICY "Allow public delete access" ON public.expenses FOR DELETE USING (true);
+    -- (Similar policies for categories if needed)
+    ```
+*   **With Authentication:** Define policies based on `auth.uid()` to restrict access to the logged-in user. See comments in the migration file for examples.
 
 ## Genkit (Optional AI Features)
 
