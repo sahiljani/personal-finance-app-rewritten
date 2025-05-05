@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -57,7 +58,7 @@ export function AddExpenseForm({
     resolver: zodResolver(formSchema),
     // Set default values based on mode, ensure they are defined or empty strings
     defaultValues: {
-      amount: expenseToEdit?.amount ?? undefined, // Use undefined for number input placeholder
+      amount: expenseToEdit?.amount ?? '', // Use '' instead of undefined
       description: expenseToEdit?.description ?? "",
       categoryId: expenseToEdit?.categoryId ?? "",
     },
@@ -66,7 +67,7 @@ export function AddExpenseForm({
    // Use useEffect to reset form when expenseToEdit changes (e.g., switching from add to edit)
    React.useEffect(() => {
     form.reset({
-      amount: expenseToEdit?.amount ?? undefined,
+      amount: expenseToEdit?.amount ?? '', // Use '' instead of undefined
       description: expenseToEdit?.description ?? "",
       categoryId: expenseToEdit?.categoryId ?? "",
     });
@@ -142,7 +143,7 @@ export function AddExpenseForm({
       }
 
       // Reset form to initial state (empty for add, original for edit if needed, but empty is usually preferred)
-      form.reset({ amount: undefined, description: '', categoryId: ''});
+      form.reset({ amount: '', description: '', categoryId: ''}); // Reset amount to ''
       onSave?.(savedExpense); // Callback with the saved/updated expense
 
     } catch (error) {
@@ -210,6 +211,8 @@ export function AddExpenseForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
+                   {/* Ensure a placeholder item exists if field.value might be empty initially */}
+                   {!field.value && <SelectItem value="" disabled>Select a category</SelectItem>}
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id}>
                        {/* Icon can be added here if available */}
