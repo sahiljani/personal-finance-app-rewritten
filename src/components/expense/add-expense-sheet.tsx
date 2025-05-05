@@ -7,7 +7,7 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetFooter,
+  // SheetFooter, // Removed as form handles buttons
 } from "@/components/ui/sheet";
 import {
   Dialog,
@@ -15,23 +15,26 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
+ // DialogFooter, // Removed as form handles buttons
 } from "@/components/ui/dialog";
 import { AddExpenseForm } from "@/components/expense/add-expense-form";
 import { getCategories } from "@/lib/actions";
 import type { Category, Expense } from "@/lib/types";
 import { useIsMobile } from "@/hooks/use-mobile"; // Assuming you have this hook
+import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 
 type AddExpenseSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  expenseToEdit?: Expense | null; // Optional: For editing
+  expenseToEdit: Expense | null; // Use null explicitly for adding
 };
 
 export function AddExpenseSheet({ open, onOpenChange, expenseToEdit }: AddExpenseSheetProps) {
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
    const isMobile = useIsMobile(); // Hook to check screen size
+   const isEditMode = !!expenseToEdit; // Determine mode based on prop
 
   React.useEffect(() => {
     async function fetchCategories() {
@@ -51,7 +54,8 @@ export function AddExpenseSheet({ open, onOpenChange, expenseToEdit }: AddExpens
     }
   }, [open]);
 
-  const handleSave = () => {
+  const handleSave = (savedExpense: Expense) => {
+      // Optionally trigger a refetch or update global state if needed
     onOpenChange(false); // Close the sheet/dialog on save
   };
 
@@ -59,8 +63,8 @@ export function AddExpenseSheet({ open, onOpenChange, expenseToEdit }: AddExpens
     onOpenChange(false); // Close the sheet/dialog on cancel
   };
 
- const title = expenseToEdit ? "Edit Expense" : "Add New Expense";
- const description = expenseToEdit ? "Update the details of your expense." : "Enter the details for your new expense.";
+ const title = isEditMode ? "Edit Expense" : "Add New Expense";
+ const description = isEditMode ? "Update the details of your expense." : "Enter the details for your new expense.";
 
 
   // Render Dialog on Desktop, Sheet on Mobile
@@ -68,23 +72,29 @@ export function AddExpenseSheet({ open, onOpenChange, expenseToEdit }: AddExpens
 
   const Content = (
      <>
-        <DialogHeader className="sm:hidden"> {/* Only show Header in Dialog on non-mobile */}
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-         <SheetHeader className="md:hidden"> {/* Only show Header in Sheet on mobile */}
-            <SheetTitle>{title}</SheetTitle>
-            <SheetDescription>{description}</SheetDescription>
-        </SheetHeader>
+        {/* Render header based on context (Dialog or Sheet) */}
+        {isMobile ? (
+             <SheetHeader className="mb-4"> {/* Add margin-bottom */}
+                <SheetTitle>{title}</SheetTitle>
+                <SheetDescription>{description}</SheetDescription>
+            </SheetHeader>
+        ) : (
+            <DialogHeader className="mb-4"> {/* Add margin-bottom */}
+                <DialogTitle>{title}</DialogTitle>
+                <DialogDescription>{description}</DialogDescription>
+            </DialogHeader>
+        )}
+
 
         {isLoadingCategories ? (
-            <div className="flex justify-center items-center h-40">
-                <p>Loading categories...</p>
-                {/* Or use a Skeleton loader */}
+            <div className="flex justify-center items-center h-40 flex-col gap-2">
+                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <p className="text-muted-foreground">Loading categories...</p>
             </div>
          ) : categories.length > 0 ? (
            <AddExpenseForm
                 categories={categories}
+                // Pass expenseToEdit directly (can be null for add mode)
                 expenseToEdit={expenseToEdit}
                 onSave={handleSave}
                 onCancel={handleCancel}
@@ -95,21 +105,18 @@ export function AddExpenseSheet({ open, onOpenChange, expenseToEdit }: AddExpens
              </p>
          )
         }
-         {/* Footer might not be needed if form has Cancel/Save buttons */}
-        {/* <SheetFooter className="md:hidden">
-            <p>Sheet Footer</p>
-        </SheetFooter>
-         <DialogFooter className="hidden sm:flex">
-             <p>Dialog Footer</p>
-         </DialogFooter> */}
+         {/* Footer removed as form handles Save/Cancel */}
      </>
   );
 
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" className="h-[85vh] flex flex-col">
-          {Content}
+        {/* Adjust height and add overflow handling */}
+        <SheetContent side="bottom" className="h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="flex-grow overflow-y-auto p-1"> {/* Scrollable content area */}
+             {Content}
+          </div>
         </SheetContent>
       </Sheet>
     );
@@ -117,7 +124,6 @@ export function AddExpenseSheet({ open, onOpenChange, expenseToEdit }: AddExpens
 
   return (
      <Dialog open={open} onOpenChange={onOpenChange}>
-        {/* DialogTrigger might be handled externally by the button */}
         <DialogContent className="sm:max-w-[425px] md:max-w-md lg:max-w-lg">
             {Content}
         </DialogContent>

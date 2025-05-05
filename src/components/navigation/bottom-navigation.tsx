@@ -12,32 +12,37 @@ export function BottomNavigation() {
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-background border-t border-border flex items-center justify-center gap-8 md:hidden z-40">
-        {/* Add Button */}
+      <nav className="fixed bottom-0 left-0 right-0 h-20 bg-background/80 backdrop-blur-sm border-t border-border flex items-center justify-center gap-8 md:hidden z-40 px-4">
+        {/* Add Button - Updated Styling */}
          <Button
-          variant="default"
-          size="lg"
-          className="rounded-full w-16 h-16 flex items-center justify-center bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 focus-visible:ring-accent"
+          variant="default" // Uses primary color from theme
+          size="lg" // Adjust size if needed
+          className="rounded-full w-16 h-16 flex items-center justify-center shadow-md hover:bg-primary/90 focus-visible:ring-ring" // Use theme ring color
           aria-label="Add Manual Expense"
           onClick={() => setIsAddSheetOpen(true)}
         >
-          <Plus className="w-8 h-8" />
+          <Plus className="w-7 h-7" /> {/* Slightly smaller icon for better padding */}
         </Button>
 
-        {/* Upload Button */}
+        {/* Upload Button - Updated Styling */}
         <Button
-          variant="default"
-           size="lg"
-           className="rounded-full w-16 h-16 flex items-center justify-center bg-accent text-accent-foreground shadow-lg hover:bg-accent/90 focus-visible:ring-primary"
+          variant="default" // Use accent color from theme
+          size="lg" // Adjust size if needed
+           className="rounded-full w-16 h-16 flex items-center justify-center bg-accent text-accent-foreground shadow-md hover:bg-accent/90 focus-visible:ring-ring" // Use theme ring color
           aria-label="Upload Receipt"
           onClick={() => setIsUploadDrawerOpen(true)}
         >
-          <Upload className="w-8 h-8" />
+          <Upload className="w-7 h-7" /> {/* Slightly smaller icon */}
         </Button>
       </nav>
 
       {/* Render Modals/Sheets/Drawers */}
-      <AddExpenseSheet open={isAddSheetOpen} onOpenChange={setIsAddSheetOpen} />
+      {/* Pass null initially for expenseToEdit to ensure AddExpenseForm resets correctly */}
+       <AddExpenseSheet
+            open={isAddSheetOpen}
+            onOpenChange={setIsAddSheetOpen}
+            expenseToEdit={null} // Explicitly pass null when adding
+       />
       <UploadReceiptDrawer open={isUploadDrawerOpen} onOpenChange={setIsUploadDrawerOpen} />
     </>
   );

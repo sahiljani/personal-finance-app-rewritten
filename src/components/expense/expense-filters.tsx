@@ -49,9 +49,14 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
    // Initialize with ALL_CATEGORIES_VALUE if no specific category is selected
    const [categoryId, setCategoryId] = React.useState<string>(initialCategoryId ?? ALL_CATEGORIES_VALUE);
 
+   // Refs for popovers to close them programmatically
+   const dateFromPopoverOpen = React.useRef(false);
+   const dateToPopoverOpen = React.useRef(false);
+
+
    // Function to update URL search params
    const updateSearchParams = React.useCallback(() => {
-        const current = new URLSearchParams(Array.from(searchParams.entries())); // Create mutable copy
+        const current = new URLSearchParams(Array.from(searchParams.entries()));
 
         if (dateFrom) {
              current.set("dateFrom", format(dateFrom, "yyyy-MM-dd"));
@@ -65,33 +70,29 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
             current.delete("dateTo");
         }
 
-        // Only set categoryId param if it's not the "all" value
         if (categoryId && categoryId !== ALL_CATEGORIES_VALUE) {
             current.set("categoryId", categoryId);
         } else {
             current.delete("categoryId");
         }
 
-         // Maintain other existing params if any
         const search = current.toString();
         const query = search ? `?${search}` : "";
 
-        router.push(`${pathname}${query}`, { scroll: false }); // Use scroll: false to prevent jumping
+        router.push(`${pathname}${query}`, { scroll: false });
    }, [dateFrom, dateTo, categoryId, searchParams, pathname, router]);
 
-  // Apply filters when state changes (debounced or immediate)
-  // Using useEffect for simplicity here, debounce could be added
+    // Update URL when filter state changes
     React.useEffect(() => {
-        // We only update search params, the page component will refetch based on them
         updateSearchParams();
-    }, [dateFrom, dateTo, categoryId, updateSearchParams]); // Rerun when filter states change
+    }, [dateFrom, dateTo, categoryId, updateSearchParams]);
 
 
   const clearFilters = () => {
     setDateFrom(undefined);
     setDateTo(undefined);
-    setCategoryId(ALL_CATEGORIES_VALUE); // Reset category to "all"
-    // updateSearchParams will be triggered by useEffect due to state changes
+    setCategoryId(ALL_CATEGORIES_VALUE);
+    // updateSearchParams will be triggered by useEffect
   };
 
    const setDateRangePreset = (preset: 'thisMonth' | 'lastMonth') => {
@@ -101,7 +102,7 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
 
         if (preset === 'thisMonth') {
             start = startOfMonth(today);
-            end = endOfMonth(today); // Or just today for up-to-today
+            end = endOfMonth(today);
         } else { // lastMonth
             const lastMonthDate = subMonths(today, 1);
             start = startOfMonth(lastMonthDate);
@@ -109,65 +110,76 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
         }
         setDateFrom(start);
         setDateTo(end);
+        // Close popovers if open
+        dateFromPopoverOpen.current = false;
+        dateToPopoverOpen.current = false;
    }
 
-   // Filters are applied if dates are set or category is not the default "all"
+   const handleDateSelect = (setter: (date: Date | undefined) => void, popoverRef: React.MutableRefObject<boolean>) => (date: Date | undefined) => {
+       setter(date);
+       popoverRef.current = false; // Close popover on select
+   };
+
+
    const areFiltersApplied = !!dateFrom || !!dateTo || categoryId !== ALL_CATEGORIES_VALUE;
 
   return (
-    <div className="flex flex-col md:flex-row gap-4 md:items-end p-4 border rounded-lg bg-card shadow-sm">
+    // Use Tailwind classes for layout and styling
+    <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-end p-4 border rounded-lg bg-card shadow-sm">
       {/* Date Range Picker */}
-      <div className="flex flex-col md:flex-row gap-2 items-center">
-         <div className="w-full md:w-auto">
-            <Label htmlFor="date-from-popover">From</Label>
-            <Popover>
+      <div className="flex flex-col sm:flex-row gap-3 md:gap-2 items-start sm:items-end">
+         {/* From Date */}
+         <div className="grid w-full sm:w-auto gap-1.5">
+            <Label htmlFor="date-from-popover" className="text-xs">From</Label>
+            <Popover open={dateFromPopoverOpen.current} onOpenChange={(open) => dateFromPopoverOpen.current = open}>
               <PopoverTrigger asChild>
                 <Button
                   id="date-from-popover"
                   variant={"outline"}
                   className={cn(
-                    "w-full md:w-[180px] justify-start text-left font-normal",
+                    "w-full sm:w-[160px] md:w-[180px] justify-start text-left font-normal text-xs h-9", // Smaller height and text
                     !dateFrom && "text-muted-foreground"
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateFrom ? format(dateFrom, "PPP") : <span>Pick a start date</span>}
+                  <CalendarIcon className="mr-1.5 h-3.5 w-3.5" /> {/* Smaller icon */}
+                  {dateFrom ? format(dateFrom, "MMM d, yyyy") : <span>Start date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
                 <Calendar
                   mode="single"
                   selected={dateFrom}
-                  onSelect={setDateFrom}
+                  onSelect={handleDateSelect(setDateFrom, dateFromPopoverOpen)}
                   initialFocus
                 />
               </PopoverContent>
             </Popover>
          </div>
-         <div className="w-full md:w-auto">
-             <Label htmlFor="date-to-popover">To</Label>
-             <Popover>
+          {/* To Date */}
+         <div className="grid w-full sm:w-auto gap-1.5">
+             <Label htmlFor="date-to-popover" className="text-xs">To</Label>
+             <Popover open={dateToPopoverOpen.current} onOpenChange={(open) => dateToPopoverOpen.current = open}>
               <PopoverTrigger asChild>
                 <Button
                   id="date-to-popover"
                   variant={"outline"}
                   className={cn(
-                    "w-full md:w-[180px] justify-start text-left font-normal",
+                    "w-full sm:w-[160px] md:w-[180px] justify-start text-left font-normal text-xs h-9", // Smaller height and text
                     !dateTo && "text-muted-foreground"
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateTo ? format(dateTo, "PPP") : <span>Pick an end date</span>}
+                  <CalendarIcon className="mr-1.5 h-3.5 w-3.5" /> {/* Smaller icon */}
+                  {dateTo ? format(dateTo, "MMM d, yyyy") : <span>End date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
                 <Calendar
                   mode="single"
                   selected={dateTo}
-                  onSelect={setDateTo}
+                  onSelect={handleDateSelect(setDateTo, dateToPopoverOpen)}
                   initialFocus
                   disabled={(date) =>
-                    dateFrom ? date < dateFrom : false // Disable dates before start date
+                    dateFrom ? date < dateFrom : false
                   }
                 />
               </PopoverContent>
@@ -176,24 +188,23 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
       </div>
 
         {/* Date Presets */}
-        <div className="flex gap-2 items-center">
-             <Button variant="ghost" size="sm" onClick={() => setDateRangePreset('thisMonth')}>This Month</Button>
-            <Button variant="ghost" size="sm" onClick={() => setDateRangePreset('lastMonth')}>Last Month</Button>
+        <div className="flex gap-2 items-center mt-2 sm:mt-0">
+             <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => setDateRangePreset('thisMonth')}>This Month</Button>
+            <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => setDateRangePreset('lastMonth')}>Last Month</Button>
         </div>
 
 
       {/* Category Select */}
-      <div className="w-full md:w-auto md:min-w-[200px]">
-          <Label htmlFor="category-select">Category</Label>
+      <div className="grid w-full md:w-auto md:min-w-[180px] gap-1.5 mt-2 md:mt-0">
+          <Label htmlFor="category-select" className="text-xs">Category</Label>
          <Select value={categoryId} onValueChange={setCategoryId}>
-           <SelectTrigger id="category-select">
+           <SelectTrigger id="category-select" className="h-9 text-xs"> {/* Smaller height and text */}
              <SelectValue placeholder="All Categories" />
            </SelectTrigger>
            <SelectContent>
-             {/* Use the specific value for "All Categories" */}
-             <SelectItem value={ALL_CATEGORIES_VALUE}>All Categories</SelectItem>
+             <SelectItem value={ALL_CATEGORIES_VALUE} className="text-xs">All Categories</SelectItem>
              {categories.map((category) => (
-               <SelectItem key={category.id} value={category.id}>
+               <SelectItem key={category.id} value={category.id} className="text-xs">
                  {category.name}
                </SelectItem>
              ))}
@@ -203,9 +214,9 @@ export function ExpenseFilters({ categories }: ExpenseFiltersProps) {
 
         {/* Clear Filters Button */}
        {areFiltersApplied && (
-         <Button variant="ghost" onClick={clearFilters} size="sm" className="text-muted-foreground hover:text-destructive">
-             <FilterX className="mr-1 h-4 w-4" />
-            Clear Filters
+         <Button variant="ghost" onClick={clearFilters} size="sm" className="text-muted-foreground hover:text-destructive h-8 text-xs mt-2 md:mt-0 self-end md:self-auto">
+             <FilterX className="mr-1 h-3.5 w-3.5" /> {/* Smaller icon */}
+            Clear
         </Button>
        )}
     </div>
